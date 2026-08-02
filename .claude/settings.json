@@ -1,0 +1,23 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "allow": [
+            "Bash(just build)",
+            "Bash(just lint)",
+            "Bash(just test)",
+            "Bash(just generate *)",
+            "Bash(rg *)",
+            "Bash(jq *)",
+            "WebFetch(domain:developers.google.com)"
+        ],
+        "deny": [
+            "Read(./.env)",
+            "Read(./.local/*)",
+            "Bash(just run)",
+            "Bash(git add *)",
+            "Bash(git push *)"
+        ],
+        "ask": []
+    },
+    "plansDirectory": "./docs/plans"
+}
