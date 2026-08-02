@@ -12,7 +12,9 @@ Logs and Decision Records.
 A web application: a client-side rendered Leptos single-page application,
 compiled to WebAssembly and delivered as static files, talking to a separate
 axum HTTP API. Both are Rust crates in one Cargo workspace, sharing the types
-that cross the boundary. AWS is the intended deployment target.
+that cross the boundary. It deploys to AWS: the bundle to S3 behind CloudFront,
+the API to Lambda behind an API Gateway HTTP API, with Cognito holding the
+identities.
 
 ## Documents
 
@@ -20,6 +22,7 @@ that cross the boundary. AWS is the intended deployment target.
 | --- | --- |
 | [workspace.md](workspace.md) | Crate layout, dependency management, toolchain, task runner |
 | [frontend.md](frontend.md) | The Leptos SPA: routing, data fetching, build, assets |
+| [deployment.md](deployment.md) | AWS runtime, the Terraform layering, artefact deployment |
 
 Not yet written, because it does not exist yet:
 
@@ -29,7 +32,9 @@ Not yet written, because it does not exist yet:
   `shared::Greeting` as JSON. It binds `127.0.0.1:3000` and configures no CORS,
   for the reason given in DR-0001. A document belongs here once the service
   does something.
-- **deployment** — S3, CloudFront, the API's runtime, IaC, CI/CD
+- **ci** — the pipeline that runs the Terraform applies and pushes the
+  artefacts. `deployment.md` describes what has to happen; nothing automates it
+  yet.
 
 ## Decision Records
 
@@ -38,3 +43,5 @@ Not yet written, because it does not exist yet:
 | [DR-0001](../decisions/DR-0001-csr-spa-with-separate-api.md) | CSR SPA served as static files, with a separate API |
 | [DR-0002](../decisions/DR-0002-stay-on-the-leptos-0-8-line.md) | Build on the Leptos 0.8 line, not the 0.9 prerelease |
 | [DR-0003](../decisions/DR-0003-trunk-as-a-pinned-prebuilt-binary.md) | trunk as a pinned prebuilt binary; wasm-bindgen left to trunk |
+| [DR-0004](../decisions/DR-0004-terraform-as-the-iac-tool.md) | Terraform is the Infrastructure as Code tool |
+| [DR-0005](../decisions/DR-0005-infrastructure-layered-by-blast-radius.md) | Infrastructure layered by blast radius, not by environment |
