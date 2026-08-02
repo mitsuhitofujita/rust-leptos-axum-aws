@@ -1,1 +1,1 @@
-# rust-laptos-axum-aws
+# rust-leptos-axum-aws
