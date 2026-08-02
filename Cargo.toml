@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96.1"
+license = "MIT"
+
+[workspace.dependencies]
+shared = { path = "crates/shared" }
+
+leptos = "0.8.20"
+leptos_router = "0.8.15"
+console_error_panic_hook = "0.1.7"
+gloo-net = { version = "0.7.0", default-features = false }
+
+axum = "0.8.9"
+tokio = "1.53.1"
+
+serde = { version = "1.0.229", features = ["derive"] }

@@ -25,6 +25,16 @@ WORKDIR ${WORKSPACE_DIR}
 
 USER ${VSCODE_USER}
 
-RUN rustup component add clippy rustfmt
+RUN rustup component add clippy rustfmt && \
+    rustup target add wasm32-unknown-unknown
+
+# trunk builds the CSR WASM frontend. The prebuilt binary is used because
+# building it from source takes minutes; keep the version pinned so the image is
+# reproducible. wasm-bindgen is not installed here: trunk downloads a CLI
+# matching the project's wasm-bindgen version into its own cache at build time.
+ARG TRUNK_VERSION=0.21.14
+RUN curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" \
+        | tar -xzC "${CARGO_HOME}/bin" trunk && \
+    chmod +x "${CARGO_HOME}/bin/trunk"
 
 RUN curl -fsSL https://claude.ai/install.sh | bash
