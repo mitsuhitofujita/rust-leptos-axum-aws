@@ -1,0 +1,10 @@
+# Copy to a gitignored terraform.auto.tfvars, or export the same values as
+# TF_VAR_google_client_id and TF_VAR_google_client_secret. Neither the real file
+# nor the values belong in this repository.
+#
+# Both come from an OAuth 2.0 client of type "Web application" in the Google
+# Cloud console. Its authorised redirect URI is the Cognito hosted-UI callback:
+#
+#   https://<hosted_ui_domain_prefix>.auth.ap-northeast-1.amazoncognito.com/oauth2/idpresponse
+google_client_id     = "REPLACE_WITH_GOOGLE_CLIENT_ID"
+google_client_secret = "REPLACE_WITH_GOOGLE_CLIENT_SECRET"

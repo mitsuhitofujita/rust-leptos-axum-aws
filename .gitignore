@@ -2,3 +2,20 @@
 /target
 /dist
 .trunk/
+
+# Terraform. The .terraform.lock.hcl files are committed — they are the provider
+# pin — but nothing below is.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Carries the AWS account id, which is deliberately kept out of this repository.
+# infra/backend.hcl.example is the template.
+/infra/backend.hcl
+
+# bootstrap ships with a local backend so its first apply can create the state
+# bucket. backend.tf appears only after that migration — see
+# infra/bootstrap/backend.tf.example.
+/infra/bootstrap/backend.tf

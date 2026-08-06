@@ -1,3 +1,5 @@
+FROM docker.io/amazon/aws-cli:latest AS aws-cli
+
 FROM rust:1.96-slim-trixie
 
 RUN apt-get update && \
@@ -6,10 +8,26 @@ RUN apt-get update && \
         git \
         jq \
         just \
-        ripgrep
+        ripgrep \
+        unzip \
+        zip
 RUN apt-get autoremove -y && \
     apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
+
+ENV AWS_CLI_HOME=/usr/local/aws-cli
+COPY --from=aws-cli $AWS_CLI_HOME $AWS_CLI_HOME
+COPY --from=aws-cli /usr/local/bin/ /usr/local/bin/
+
+# terraform provisions the AWS infrastructure (DR-0004). HashiCorp publishes the
+# prebuilt binary as a zip and nothing else, which is why unzip is installed
+# above; keep the version pinned so the image is reproducible.
+ARG TERRAFORM_VERSION=1.15.8
+RUN curl -fsSL -o /tmp/terraform.zip \
+        "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" && \
+    unzip -q /tmp/terraform.zip terraform -d /usr/local/bin && \
+    chmod +x /usr/local/bin/terraform && \
+    rm /tmp/terraform.zip
 
 ARG VSCODE_UID=1000
 ARG VSCODE_USER=vscode

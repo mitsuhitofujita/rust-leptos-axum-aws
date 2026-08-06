@@ -1,0 +1,13 @@
+# Copy this file to backend.tf once `terraform apply` has created the state
+# bucket, then migrate this layer's own state into it:
+#
+#   cp backend.tf.example backend.tf
+#   terraform init -migrate-state -backend-config=../backend.hcl
+#
+# backend.tf is gitignored, so the committed tree always shows bootstrap in its
+# starting shape — a local backend with nowhere remote to go yet.
+terraform {
+  backend "s3" {
+    key = "bootstrap/terraform.tfstate"
+  }
+}

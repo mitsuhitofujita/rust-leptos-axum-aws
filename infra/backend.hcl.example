@@ -1,0 +1,17 @@
+# Copy to infra/backend.hcl and fill in the bucket that `infra/bootstrap`
+# created. The real file is gitignored: the bucket name carries the AWS account
+# id, which is deliberately kept out of this repository.
+#
+#   terraform -chdir=bootstrap output -raw backend_hcl > backend.hcl
+#
+# Every layer but bootstrap declares only `key` in its backend block and takes
+# the rest from here:
+#
+#   terraform -chdir=<layer> init -backend-config=../backend.hcl
+#
+# use_lockfile is S3's native state locking, which replaces the DynamoDB lock
+# table the older idiom needs.
+bucket       = "rust-leptos-axum-aws-tfstate-000000000000"
+region       = "ap-northeast-1"
+encrypt      = true
+use_lockfile = true

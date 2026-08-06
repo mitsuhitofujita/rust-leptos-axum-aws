@@ -1,0 +1,10 @@
+#!/bin/sh
+# A stand-in, not the service.
+#
+# Terraform owns the function's shape; it does not own the bytes in it
+# (DR-0005). The real package is the provided.al2023 build of crates/server,
+# pushed by `aws lambda update-function-code`. This file exists only so the very
+# first `terraform apply` has something to upload, and the ignore_changes in
+# lambda.tf means no later apply replaces the real package with it.
+echo "rust-leptos-axum-aws: placeholder package. Deploy crates/server over it." >&2
+exit 1
