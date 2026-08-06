@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-02
+Updated: 2026-08-05
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -33,8 +33,10 @@ Not yet written, because it does not exist yet:
   for the reason given in DR-0001. A document belongs here once the service
   does something.
 - **ci** — the pipeline that runs the Terraform applies and pushes the
-  artefacts. `deployment.md` describes what has to happen; nothing automates it
-  yet.
+  artefacts. Both halves exist as commands a person runs: `infra/` holds the
+  configuration, and `just deploy-web` / `just deploy-api` push the artefacts.
+  All four layers have been applied and both artefacts deployed, by hand.
+  Nothing automates any of it, and a document belongs here once something does.
 
 ## Decision Records
 
@@ -45,3 +47,7 @@ Not yet written, because it does not exist yet:
 | [DR-0003](../decisions/DR-0003-trunk-as-a-pinned-prebuilt-binary.md) | trunk as a pinned prebuilt binary; wasm-bindgen left to trunk |
 | [DR-0004](../decisions/DR-0004-terraform-as-the-iac-tool.md) | Terraform is the Infrastructure as Code tool |
 | [DR-0005](../decisions/DR-0005-infrastructure-layered-by-blast-radius.md) | Infrastructure layered by blast radius, not by environment |
+| [DR-0006](../decisions/DR-0006-state-backend-configured-from-outside-the-repository.md) | The Terraform state backend is configured from outside the repository |
+| [DR-0007](../decisions/DR-0007-the-hosted-ui-domain-prefix-does-not-echo-the-project-name.md) | The Cognito hosted-UI domain prefix does not echo the project name |
+| [DR-0008](../decisions/DR-0008-the-spa-is-configured-at-compile-time.md) | The SPA receives its configuration at compile time, not at runtime |
+| [DR-0009](../decisions/DR-0009-cors-is-answered-by-the-http-api.md) | CORS is answered by the HTTP API, so `/api` routes are declared per method |

@@ -1,6 +1,6 @@
 # Workspace
 
-Updated: 2026-08-02
+Updated: 2026-08-04
 
 ## Purpose
 
@@ -60,6 +60,10 @@ version-mismatch failures — DR-0003.
 | `clean` | `cargo clean` and remove `dist/` |
 
 Development needs `dev-api` and `dev-web` running together, in two terminals.
+
+The `justfile` also holds the `tf-*` recipes that apply the infrastructure and
+the `deploy-*` recipes that push the artefacts. Both sets belong to
+`deployment.md` and are described there, not here.
 
 ## Constraints
 

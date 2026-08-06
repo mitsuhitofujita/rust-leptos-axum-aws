@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-02
+Updated: 2026-08-05
 
 ## Purpose
 
@@ -47,11 +47,17 @@ messages the UI can render. Components load them with `LocalResource` inside
 `LocalResource`, not `Resource`: the browser fetch future is not `Send`, and in
 a CSR build there is no server to run it on.
 
+**The API's origin** is the compile-time environment variable `API_BASE_URL`,
+read once through `option_env!` into a constant and joined to each absolute path
+(DR-0008). Unset, it is the empty string, which leaves every call relative — so a
+development build is served by the trunk proxy and needs no configuration at all.
+`just deploy-web` resolves it from SSM for a deployed build.
+
 ## Interfaces
 
-**Consumes** `GET /api/greeting` → `shared::Greeting`, via a relative path. The
-frontend never contains an API hostname; the origin is resolved by the proxy in
-development and will be by configuration in production.
+**Consumes** `GET /api/greeting` → `shared::Greeting`, as an absolute path joined
+to `API_BASE_URL`. No API hostname appears in the source; the origin arrives at
+build time, or not at all in development.
 
 **Depends on** `leptos` (feature `csr`), `leptos_router` (default features — it
 has no `csr` feature), `gloo-net` (features `http`, `json`) for fetch,
@@ -61,11 +67,16 @@ has no `csr` feature), `gloo-net` (features `http`, `json`) for fetch,
 
 ## Constraints
 
-- All API calls use relative paths, so that the development proxy and the
-  production origin are both handled outside the code.
+- No API hostname is written into the source. Calls are absolute paths joined to
+  `API_BASE_URL`, which is supplied at build time and not fetched at runtime, so
+  the development proxy and the production origin are both settled outside the
+  code — DR-0008.
 - The dev server proxies `/api` to `127.0.0.1:3000`, so development is
   single-origin and CORS never arises. Production is cross-origin and requires
   CORS on the API — DR-0001.
+- Every request under `/api` needs a Cognito access token in an `Authorization`
+  header, which the SPA does not yet obtain or send, so a deployed build renders
+  a 401 where the greeting belongs. See `docs/design/deployment.md`.
 - Deep links are router paths, not files. `trunk serve` serves `index.html` for
   unknown paths, and the production host must be configured to do the same, or
   reloading on any non-root route fails — DR-0001.

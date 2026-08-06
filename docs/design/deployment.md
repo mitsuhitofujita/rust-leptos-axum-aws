@@ -1,6 +1,12 @@
 # Deployment
 
-Updated: 2026-08-02
+Updated: 2026-08-05
+
+Note: all four layers have been applied, all ten SSM parameters exist, and both
+artefacts have been deployed on top of them. The CloudFront domain serves the
+SPA and `GET /health` on the API returns `ok`. `GET /api/greeting` returns 401,
+because the SPA carries no access token yet — the one remaining gap, and the
+last Constraint below.
 
 ## Purpose
 
@@ -33,11 +39,27 @@ in the bootstrap bucket and its own apply (DR-0005):
 
 ```text
 infra/
-  bootstrap/    the S3 bucket holding every other layer's state
-  delivery/     S3 origin bucket, CloudFront, OAC, cache behaviour, SPA fallback
-  identity/     Cognito User Pool, Google IdP, hosted-UI domain, app client
-  api/          Lambda, HTTP API, JWT authorizer, CORS, IAM role, log groups
+  backend.hcl.example        template for the uncommitted backend.hcl — DR-0006
+  bootstrap/                 the S3 bucket holding every other layer's state
+    backend.tf.example       the migration snippet, copied into place once
+  delivery/                  S3 origin bucket, CloudFront, OAC, cache behaviour,
+                             SPA fallback
+  identity/                  Cognito User Pool, Google IdP, hosted-UI domain,
+                             app client
+  api/                       Lambda, HTTP API, JWT authorizer, CORS, IAM role,
+                             log groups
+    placeholder/bootstrap    stand-in package for the first apply only
 ```
+
+Every layer holds `versions.tf`, `variables.tf`, `outputs.tf` and its resources;
+`api` splits those across `iam.tf`, `lambda.tf` and `apigateway.tf`. Each
+layer's `.terraform.lock.hcl` is committed — it is the provider pin.
+
+Names all derive from one `project` variable, `rust-leptos-axum-aws`, which is
+also the root of the SSM paths below. The two bucket names carry the account id
+as a uniqueness suffix, assembled at apply time from `aws_caller_identity`. The
+Cognito hosted-UI domain prefix is the single exception and is `rust-leptos-axum-auth`,
+for the reason in the Constraints section.
 
 Dependencies run one way:
 
@@ -56,7 +78,29 @@ client id at build time, not through Terraform.
 
 `bootstrap` is applied once against a local backend, then its own state is
 migrated into the bucket it created. The bucket has versioning, encryption, a
-public-access block, and `prevent_destroy`.
+public-access block, and `prevent_destroy`. State is locked by S3's native lock
+file, not a DynamoDB table (DR-0006).
+
+Each layer's `backend "s3"` block declares only its `key`. The bucket name is
+not in the repository, because it carries the AWS account id, so the remaining
+backend settings come from `infra/backend.hcl` — gitignored, templated by
+`infra/backend.hcl.example`, and rendered as a `bootstrap` output (DR-0006).
+The whole first-create sequence is:
+
+```sh
+terraform -chdir=infra/bootstrap init
+terraform -chdir=infra/bootstrap apply
+terraform -chdir=infra/bootstrap output -raw backend_hcl > infra/backend.hcl
+cp infra/bootstrap/backend.tf.example infra/bootstrap/backend.tf
+terraform -chdir=infra/bootstrap init -migrate-state -backend-config=../backend.hcl
+
+just tf-init delivery && just tf-apply delivery
+just tf-init identity && just tf-apply identity   # needs the Google credentials
+just tf-init api      && just tf-apply api
+```
+
+`just tf-validate` schema-checks all four layers without credentials or a
+backend, which is as far as anything can be verified before an apply.
 
 ## Interfaces
 
@@ -68,26 +112,34 @@ what it needs with the `aws_ssm_parameter` data source.
 
 | Parameter | Written by | Read by |
 | --- | --- | --- |
-| `/<project>/delivery/cloudfront_domain` | `delivery` | `identity`, `api`, the SPA build |
-| `/<project>/delivery/cloudfront_distribution_id` | `delivery` | the deploy |
-| `/<project>/delivery/spa_bucket` | `delivery` | the deploy |
-| `/<project>/identity/user_pool_id` | `identity` | `api` |
-| `/<project>/identity/user_pool_issuer` | `identity` | `api` |
-| `/<project>/identity/app_client_id` | `identity` | the SPA build |
-| `/<project>/identity/hosted_ui_domain` | `identity` | the SPA build |
-| `/<project>/api/api_endpoint` | `api` | the SPA build |
-| `/<project>/api/lambda_function_name` | `api` | the deploy |
+| `/<project>/bootstrap/state_bucket` | `bootstrap` | operators, so the bucket is findable without reading state |
+| `/<project>/delivery/cloudfront_domain` | `delivery` | `identity`, for the callback and logout URLs; `api`, for the CORS allowed origin |
+| `/<project>/delivery/cloudfront_distribution_id` | `delivery` | `just deploy-web` |
+| `/<project>/delivery/spa_bucket` | `delivery` | `just deploy-web` |
+| `/<project>/identity/user_pool_id` | `identity` | operators, so the pool is addressable without reading state |
+| `/<project>/identity/user_pool_issuer` | `identity` | `api`, for the JWT authorizer |
+| `/<project>/identity/app_client_id` | `identity` | `api`, as the authorizer's audience; the SPA build once sign-in exists |
+| `/<project>/identity/hosted_ui_domain` | `identity` | the SPA build once sign-in exists |
+| `/<project>/api/api_endpoint` | `api` | `just deploy-web`, as `API_BASE_URL` |
+| `/<project>/api/lambda_function_name` | `api` | `just deploy-api` |
 
-The SPA build and the deploy commands are the second consumer of these
-parameters, which is why they are published rather than passed through state.
+The build and the deploy commands are the second consumer of these parameters,
+which is why they are published rather than passed through state. Two are read
+by nothing automated: they are published so that an operator can find the bucket
+and the pool without opening state, which is the same reason as the rest.
 
 ### The API's runtime shape
 
 `crates/server` is an ordinary axum binary and is not modified for Lambda. The
 Lambda Web Adapter turns the Lambda invocation into an HTTP request against it:
 
-- Build for `provided.al2023`, name the executable `bootstrap`, and zip it.
-- Attach the Lambda Web Adapter as a layer. It provides `/opt/bootstrap`.
+- Build for `provided.al2023` on `x86_64`, name the executable `bootstrap`, and
+  zip it.
+- Attach the Lambda Web Adapter as a layer. It provides `/opt/bootstrap`. The
+  layer is `arn:aws:lambda:ap-northeast-1:753240598075:layer:LambdaAdapterLayerX86:28`
+  — adapter 1.0.1, published by AWS into its own account, and therefore both
+  region- and architecture-specific. Its name is `LambdaAdapterLayerX86`, not
+  `LambdaAdapterLayerX86_64`.
 - Set `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap`, which makes the adapter the
   entry point and the packaged binary the process it proxies to.
 - Set `AWS_LWA_PORT=3000`, matching the address `crates/server` binds.
@@ -97,48 +149,119 @@ The two `bootstrap` names are unrelated: one is the `provided.al2023` handler
 convention for the packaged binary, the other is the adapter's own executable in
 the layer.
 
+**Routes.** The HTTP API declares one per method the SPA calls, plus the probe:
+
+| Route | Authorization |
+| --- | --- |
+| `GET /api/{proxy+}` | JWT authorizer, so every call the SPA makes carries a Cognito access token |
+| `POST /api/{proxy+}` | the same |
+| `GET /health` | none — a probe has no token, and the endpoint returns a constant |
+
+`{proxy+}` means a new *endpoint* under `/api` in `crates/server` needs no change
+to the infrastructure. A new *method* does: it goes in `local.api_methods` in
+`infra/api/apigateway.tf`, which both this route set and the CORS
+`allow_methods` list derive from. The methods are enumerated rather than covered
+by a single `ANY` route so that the HTTP API answers CORS preflight itself —
+DR-0009, and the CORS constraint below.
+
 ### Deploying artefacts
 
 Terraform owns the bucket and the function; it does not own their contents
-(DR-0005). Artefacts are pushed separately, on their own cadence:
+(DR-0005). Artefacts are pushed separately, on their own cadence, by two `just`
+recipes. Both resolve every name they need — bucket, distribution id, function
+name — from the SSM parameters above rather than from Terraform state, so a
+deploy needs neither `infra/backend.hcl` nor a `terraform init`. The two are
+independent and have no ordering between them, which is DR-0001 showing up in
+the task runner; there is deliberately no recipe that runs both.
 
-**Frontend.** `trunk build --release`, then sync `dist/` to the bucket and
-invalidate CloudFront. Hashed assets are uploaded first and `index.html` last,
-so the entry point never references a file that is not there yet.
+**Frontend — `just deploy-web`.** Resolve the API endpoint from SSM and hand it
+to `trunk build --release` as `API_BASE_URL` — see "Configuring the SPA" below —
+then four uploads and an invalidation. The uploads are split because `dist/` is
+not homogeneous:
 
-**API.** Build the `provided.al2023` binary, zip it as `bootstrap`, then
-`aws lambda update-function-code`. No Terraform run is involved.
+| Pass | Contents | `Cache-Control` |
+| --- | --- | --- |
+| 1 | every hashed asset except `*.wasm` | `public, max-age=31536000, immutable` |
+| 2 | `*.wasm` | as pass 1, plus an explicit `application/wasm` type |
+| 3 | `public/` | `public, max-age=300` |
+| 4 | `index.html` | `no-cache` |
+
+The order is the load-bearing part: every hashed asset is in place before
+`index.html`, so the entry point never references a file that is not there yet.
+Each pass carries `--delete`, which retires the previous build's files in the
+same sweep; keys matched by a pass's `--exclude` are exempt from its deletes as
+well as from its uploads, so the passes do not clobber one another.
+
+The invalidation is a wildcard. Only `public/` strictly needs one — hashed
+assets change name, and `index.html` is on `Managed-CachingDisabled` — but
+invalidations are free at this volume and a wildcard survives a change to the
+cache behaviours.
+
+**API — `just deploy-api`.** Build `crates/server` for `x86_64-unknown-linux-gnu`,
+copy it to `bootstrap`, zip it, `aws lambda update-function-code`, then
+`aws lambda wait function-updated`, since the update call returns before the new
+code is live. No Terraform run is involved, and no cross-compiler either — see
+the glibc constraint below.
 
 ### Configuring the SPA
 
-The SPA needs the API endpoint, the Cognito app client id, and the hosted-UI
-domain. They are read from SSM and passed to `trunk build` as environment
-variables, which the crate reads at compile time. No hostname is written into
-the source — the constraint in `docs/design/frontend.md` holds — and because the
+The SPA needs the API endpoint, and the sign-in flow will need the Cognito app
+client id and the hosted-UI domain. Each such value is read from SSM and passed
+to `trunk build` as an environment variable, which the crate reads at compile
+time rather than fetching at runtime — DR-0008. No hostname is written into the
+source — the constraint in `docs/design/frontend.md` holds — and because the
 values land inside a content-hashed bundle, a configuration change invalidates
 its own cache entry.
+
+| Variable | Source | Read by |
+| --- | --- | --- |
+| `API_BASE_URL` | `/<project>/api/api_endpoint`, trailing slash stripped | `crates/app/src/api.rs` |
+
+Only the endpoint is wired. The app client id and the hosted-UI domain are
+published in SSM but passed to no build, because nothing under `crates/` reads
+them: they are inputs to the sign-in flow, which does not exist — the last
+Constraint below.
+
+`API_BASE_URL` is unset in development, and an unset value means the empty
+string, which leaves every call relative and therefore served by the trunk proxy.
+That default is what makes the same code single-origin locally and cross-origin
+in production. Cargo tracks the variable through `option_env!`, so changing it
+rebuilds the crate rather than silently reusing a bundle built against a
+different endpoint.
 
 ## Constraints
 
 - **CloudFront maps both 403 and 404 to `/index.html` with status 200.** Deep
   links are router paths, not files, so without this every reload on a non-root
   route fails — DR-0001. 403 matters as much as 404 here: the origin bucket is
-  private behind Origin Access Control, so a missing key returns `AccessDenied`,
-  not `NoSuchKey`.
+  private behind Origin Access Control, which grants `s3:GetObject` and not
+  `s3:ListBucket`, so a missing key returns `AccessDenied` rather than
+  `NoSuchKey`.
+
+  The same rule makes an *empty* bucket look like a permissions fault. Before the
+  first `just deploy-web`, the distribution root asks for `index.html`, gets 403,
+  falls back to `/index.html`, gets 403 again, and passes S3's `AccessDenied` XML
+  through to the browser. Nothing is misconfigured when that happens; nothing has
+  been deployed.
 
 - **The SPA and the API are separate origins, and CORS is configured on the
   HTTP API rather than in `crates/server`.** DR-0001 records the missing CORS
   layer in the service as a gap deployment has to close; deployment closes it at
-  API Gateway, whose HTTP APIs answer preflight themselves. That has a second
-  benefit: API Gateway answers `OPTIONS` before the JWT authorizer runs, so
-  preflight is not rejected for lacking a token. The allowed origin is the
-  CloudFront domain. `crates/server` therefore stays free of a CORS layer, and
-  local development stays single-origin through the trunk proxy.
+  API Gateway, whose HTTP APIs answer preflight themselves, ahead of any
+  authorizer — so a preflight is not rejected for lacking a token. The allowed
+  origin is the CloudFront domain. `crates/server` therefore stays free of a CORS
+  layer, and local development stays single-origin through the trunk proxy —
+  DR-0009.
 
-  `/api/*` is deliberately not routed through CloudFront as a second origin.
-  Doing so would make the SPA single-origin and remove CORS entirely, at the
-  cost of putting the API behind a cache the SPA and the API would then have to
-  reason about together — the independence DR-0001 chose is worth more.
+  **That built-in answer only applies to an `OPTIONS` request no route matches**,
+  which is why `/api/{proxy+}` is declared once per method instead of once as
+  `ANY`. An `ANY` route matches `OPTIONS` too and puts the JWT authorizer in
+  front of the preflight, which is answered 401 and blocks the request it
+  precedes.
+
+  `/api/*` is deliberately not routed through CloudFront as a second origin,
+  which would have made the SPA single-origin and removed CORS entirely —
+  DR-0008.
 
 - **One Cognito app client serves production and local development alike**, so
   its callback and logout URLs list the CloudFront domain *and*
@@ -151,11 +274,82 @@ its own cache entry.
 - **`index.html` is served with a short or no-cache header; hashed assets get a
   long one.** trunk emits content-hashed filenames for everything but the entry
   point, so caching `index.html` serves a stale bundle reference to every
-  returning visitor.
+  returning visitor. The CloudFront cache policies say this to CloudFront; the
+  `Cache-Control` headers set at upload say it to the browser, which the cache
+  policies do not reach.
+
+- **`dist/public/` is the third case, and it is neither.** trunk copies that
+  directory verbatim (`copy-dir` in `index.html`), so `public/favicon.svg` keeps
+  its name across every build. The immutable header the hashed assets get would
+  pin a stale copy in browser caches indefinitely, so it takes a short one and
+  relies on the invalidation instead. Anything added to `public/` inherits that
+  property.
+
+- **The wasm bundle's content type is set explicitly at upload.** Left to the
+  CLI's guess it may arrive as something other than `application/wasm`, and
+  `WebAssembly.instantiateStreaming` refuses a response whose type is not that.
+  This is not fatal — the wasm-bindgen glue catches the failure and falls back to
+  a non-streaming compile — but the fallback is slower and warns in every
+  visitor's console, and one flag avoids it.
+
+- **The Lambda binary is built natively, on glibc headroom that nothing
+  enforces.** `provided.al2023` ships glibc 2.34; the devcontainer's is 2.41.
+  What makes the native build safe is not the matching architecture but the fact
+  that the binary's highest versioned symbol is currently `GLIBC_2.34` exactly —
+  a dependency that pulls in a newer one would break at invocation, not at build,
+  and no schema check or test would see it first. `objdump -T` over the release
+  binary, filtered for `GLIBC_`, is the check.
+
+- **`zip` is a devcontainer dependency of `deploy-api`.** `provided.al2023`
+  accepts a zip and nothing else, and a zip cannot be produced by the `tar`
+  already present. `.devcontainer/Dockerfile` installs it alongside the `unzip`
+  that Terraform's own installation needs.
+
+- **The project name is spelled out in the `justfile` as well as in every
+  layer's `variables.tf`.** The deploy recipes address SSM paths rooted at that
+  name, and `just` has no way to read a Terraform variable. The duplication is
+  deliberate — it is what keeps a deploy free of Terraform state — and the two
+  are kept in step by hand.
 
 - **The Lambda's `filename` and `source_code_hash` are under
   `ignore_changes`.** Without it, every `terraform apply` reverts the function to
   whatever placeholder package the configuration names, undoing the last deploy.
+  The placeholder is `infra/api/placeholder/bootstrap`, a shell stub zipped by
+  `archive_file`. It exists so the first create has bytes to upload and is never
+  the running code; it exits non-zero if it ever is.
+
+- **The SPA sends no `Authorization` header yet.** `crates/app/src/api.rs`
+  reaches the right endpoint but attaches nothing to the request, so every call
+  under `/api` returns 401 and the SPA renders that status as its error. This is
+  the one gap left between a deployed stack and a working page. The authorizer is
+  what this document specifies and the configuration implements it; closing the
+  gap is frontend work — the hosted-UI redirect, the PKCE exchange, somewhere to
+  keep the token, and the header — and has not been done. The `identity` layer
+  already publishes both values that work needs, `app_client_id` and
+  `hosted_ui_domain`.
+
+- **The Lambda is `x86_64`.** It matches the devcontainer's native Rust target,
+  so `crates/server` builds for it without a cross-compiler. Moving to arm64
+  means both a cross-compiled binary and the adapter's `LambdaAdapterLayerArm64`
+  layer, which is why the architecture is a variable rather than a constant.
+
+- **The Cognito user pool carries `deletion_protection` as well as
+  `prevent_destroy`.** DR-0005 rates its loss as the only irreversible one in the
+  stack, and `prevent_destroy` stops only Terraform. Deletion protection stops
+  the console and the CLI too, and has to be turned off explicitly before the
+  pool can ever be removed.
+
+- **The Cognito hosted-UI domain prefix is the one name that does not derive
+  from `project`.** Cognito rejects a prefix containing `aws`, `amazon` or
+  `cognito`, and `project` contains `aws`, so the prefix is
+  `rust-leptos-axum-auth` — DR-0007. The rule binds this name alone; the user
+  pool, the buckets, the function and every SSM path carry `aws` freely.
+
+- **Three names are globally unique and can only fail at apply time.** The two
+  bucket names take the account id as a suffix and are unlikely to collide; the
+  hosted-UI domain prefix has no such suffix, because it is a public hostname
+  and the suffix would be the account id, so it is a plausible first-apply
+  failure. It is a variable, so a collision costs one override.
 
 - **`crates/server` binds `127.0.0.1:3000` as a constant.** The Lambda
   configuration accommodates it with `AWS_LWA_PORT`; nothing checks that the two
@@ -166,9 +360,23 @@ its own cache entry.
   `prevent_destroy` stops Terraform, not the console; versioning is what makes
   the remaining case recoverable.
 
+- **`infra/backend.hcl` is not committed and every layer's `init` needs it.**
+  It carries the state bucket name, which carries the AWS account id (DR-0006).
+  A fresh clone therefore cannot plan anything until the file is regenerated
+  from `bootstrap`'s output or copied across.
+
+- **The Google client id and secret are never written into the repository.**
+  They are Terraform variables with no default, supplied by a gitignored
+  `*.auto.tfvars` or by `TF_VAR_google_client_id` and
+  `TF_VAR_google_client_secret`. The Google OAuth client's authorised redirect
+  URI is the hosted UI's `/oauth2/idpresponse`, which is a value the console
+  needs and Terraform does not manage — so it is derived from the domain prefix
+  above and has to be re-entered by hand whenever that prefix moves.
+
 - **Nothing enforces the apply order between layers.** Terraform sees four
   unrelated root modules. The order in Structure above is maintained by this
-  document.
+  document, and repeated as a comment above the `tf-` recipes in the
+  `justfile`.
 
 - **Everything lives in one region.** No cross-region resource exists today. A
   custom domain would introduce one, since CloudFront requires its ACM
