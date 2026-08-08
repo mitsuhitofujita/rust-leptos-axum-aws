@@ -1,6 +1,9 @@
 mod api;
 mod app;
 mod auth;
+mod dashboard;
+mod home;
+mod icons;
 
 use app::App;
 

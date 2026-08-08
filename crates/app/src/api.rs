@@ -12,7 +12,8 @@
 use std::fmt;
 
 use gloo_net::http::Request;
-use shared::Greeting;
+use serde::de::DeserializeOwned;
+use shared::Dashboard;
 
 use crate::auth;
 
@@ -74,8 +75,12 @@ fn get(path: &str) -> gloo_net::http::RequestBuilder {
     }
 }
 
-pub async fn fetch_greeting() -> Result<Greeting, ApiError> {
-    let response = get("/api/greeting")
+/// Sends a GET and decodes its body.
+///
+/// One place separates 401 from every other failure, so every endpoint added
+/// below inherits that treatment rather than restating it.
+async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, ApiError> {
+    let response = get(path)
         .send()
         .await
         .map_err(|err| ApiError::Other(format!("request failed: {err}")))?;
@@ -92,7 +97,12 @@ pub async fn fetch_greeting() -> Result<Greeting, ApiError> {
     }
 
     response
-        .json::<Greeting>()
+        .json::<T>()
         .await
         .map_err(|err| ApiError::Other(format!("could not decode the response: {err}")))
+}
+
+/// The ten-day summary and the ten most recent records, in one response.
+pub async fn fetch_dashboard() -> Result<Dashboard, ApiError> {
+    get_json("/api/dashboard").await
 }

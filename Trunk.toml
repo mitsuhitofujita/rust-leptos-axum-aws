@@ -9,7 +9,7 @@ port = 8080
 open = false
 
 # Unknown paths fall back to index.html, which is what makes a reload on
-# /about work. The production host (S3 + CloudFront) needs the equivalent.
+# /dashboard work. The production host (S3 + CloudFront) needs the equivalent.
 
 # Development only: makes the SPA and the API look like one origin, so no CORS
 # is involved. Production serves them from separate origins — see DR-0001.

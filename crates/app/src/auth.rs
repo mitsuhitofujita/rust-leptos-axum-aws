@@ -37,24 +37,42 @@ const HOSTED_UI_DOMAIN: &str = match option_env!("COGNITO_HOSTED_UI_DOMAIN") {
     None => "",
 };
 
-/// The scopes the app client allows. `email` is what puts an address in the id
-/// token, which is the only thing the id token is read for.
+/// The scopes the app client allows. `profile` is what puts the display name
+/// and the profile image in the id token, and `email` the address.
 const SCOPES: &str = "openid email profile";
+
+/// The provider the `Continue with Google` button means.
+///
+/// Sent to `/oauth2/authorize` so the hosted UI goes straight to Google rather
+/// than rendering a chooser for the one provider the pool has. It matches
+/// `provider_name` on the identity provider in `infra/identity`.
+const IDENTITY_PROVIDER: &str = "Google";
 
 /// The bearer token sent to the API.
 const KEY_ACCESS_TOKEN: &str = "auth.access_token";
 /// `Date.now()` at the exchange plus `expires_in`, in milliseconds.
 const KEY_EXPIRES_AT: &str = "auth.expires_at";
-/// The address shown in the header, or absent when the id token carried none.
+/// Held but never displayed: nothing on screen identifies the account by
+/// address. Kept because the claim is already decoded and dropping it would
+/// take a claim away from whatever needs one next.
 const KEY_EMAIL: &str = "auth.email";
+/// The display name shown on the signed-in home, or absent when the id token
+/// carried none.
+const KEY_NAME: &str = "auth.name";
+/// The profile image URL Google supplies, likewise optional.
+const KEY_PICTURE: &str = "auth.picture";
 /// Live for the duration of one redirect only, removed on return.
 const KEY_VERIFIER: &str = "auth.pkce_verifier";
 const KEY_STATE: &str = "auth.state";
 
-/// What the header renders and what [`crate::api`] can expect of a request.
+/// What the pages render and what [`crate::api`] can expect of a request.
 ///
-/// `Disabled` is not a failure: it is an unconfigured build, where no control is
-/// shown and the local API — which checks nothing — keeps answering.
+/// `Disabled` is not a failure: it is an unconfigured build, where the
+/// signed-out home is what shows and the local API — which checks nothing —
+/// keeps answering.
+///
+/// `SignedIn` carries no address. The email is decoded and stored, but the only
+/// account identity that reaches a view is the display name and the image.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AuthState {
     /// Before the callback exchange has settled, at mount only.
@@ -63,20 +81,27 @@ pub enum AuthState {
     Disabled,
     SignedOut,
     SignedIn {
-        email: Option<String>,
+        name: Option<String>,
+        picture: Option<String>,
     },
     /// The hosted UI or the token endpoint refused. Recoverable by signing in
     /// again, so the control stays offered alongside the message.
     Error(String),
 }
 
-/// The `email` claim, the only part of the id token that is read.
+/// The parts of the id token that are read.
 ///
 /// This decode is for display. The token is not verified here and nothing is
 /// authorised by it — API Gateway's authorizer is the security boundary.
+///
+/// Every field is optional because the pool only carries what
+/// `infra/identity`'s attribute mapping puts there, and a Google account is not
+/// obliged to have all three.
 #[derive(Deserialize)]
 struct IdTokenClaims {
     email: Option<String>,
+    name: Option<String>,
+    picture: Option<String>,
 }
 
 /// Cognito's `/oauth2/token` response. The refresh token is deliberately not
@@ -125,6 +150,7 @@ pub fn begin_sign_in() -> Result<(), String> {
     query.append("state", &state);
     query.append("code_challenge_method", "S256");
     query.append("code_challenge", &challenge);
+    query.append("identity_provider", IDENTITY_PROVIDER);
 
     let url = format!("{}?{}", hosted_ui("/oauth2/authorize"), params(&query));
     window()?.location().set_href(&url).map_err(js_error)
@@ -217,12 +243,12 @@ async fn exchange(code: &str, verifier: &str) -> Result<AuthState, String> {
 
     // The access token is what the API receives: the authorizer's audience is
     // the app client id, which a Cognito access token carries as `client_id`.
-    // The id token is read once, for the address, and then dropped.
-    let email = token
-        .id_token
-        .as_deref()
-        .and_then(decode_jwt_claims)
-        .and_then(|claims| claims.email);
+    // The id token is read once, for the three claims, and then dropped.
+    let claims = token.id_token.as_deref().and_then(decode_jwt_claims);
+    let (email, name, picture) = match claims {
+        Some(claims) => (claims.email, claims.name, claims.picture),
+        None => (None, None, None),
+    };
 
     let store = storage()?;
     store
@@ -234,12 +260,20 @@ async fn exchange(code: &str, verifier: &str) -> Result<AuthState, String> {
             &(js_sys::Date::now() + token.expires_in * 1000.0).to_string(),
         )
         .map_err(js_error)?;
-    match &email {
-        Some(email) => store.set_item(KEY_EMAIL, email).map_err(js_error)?,
-        None => store.remove_item(KEY_EMAIL).map_err(js_error)?,
+    // Absent rather than empty when a claim did not arrive, so a stale value
+    // from a previous session in the same tab cannot outlive it.
+    for (key, value) in [
+        (KEY_EMAIL, &email),
+        (KEY_NAME, &name),
+        (KEY_PICTURE, &picture),
+    ] {
+        match value {
+            Some(value) => store.set_item(key, value).map_err(js_error)?,
+            None => store.remove_item(key).map_err(js_error)?,
+        }
     }
 
-    Ok(AuthState::SignedIn { email })
+    Ok(AuthState::SignedIn { name, picture })
 }
 
 /// The token to put in an `Authorization` header, if there is a usable one.
@@ -288,7 +322,13 @@ pub fn forget_session() {
     let Ok(store) = storage() else {
         return;
     };
-    for key in [KEY_ACCESS_TOKEN, KEY_EXPIRES_AT, KEY_EMAIL] {
+    for key in [
+        KEY_ACCESS_TOKEN,
+        KEY_EXPIRES_AT,
+        KEY_EMAIL,
+        KEY_NAME,
+        KEY_PICTURE,
+    ] {
         let _ = store.remove_item(key);
     }
 }
@@ -306,7 +346,8 @@ fn forget_transient() {
 fn restore_session() -> AuthState {
     match access_token() {
         Some(_) => AuthState::SignedIn {
-            email: read(KEY_EMAIL),
+            name: read(KEY_NAME),
+            picture: read(KEY_PICTURE),
         },
         None => AuthState::SignedOut,
     }

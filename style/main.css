@@ -1,96 +1,812 @@
+/* actord — the shared visual system.
+ *
+ * The tokens and rules recorded in docs/design/visual-design.md, applied to the
+ * screens in docs/design/page-layouts.md. The three HTML references under
+ * docs/design/html/ carry a near-identical style block; this is that block,
+ * extracted once, with the places they disagree reconciled in favour of the
+ * Design Documents.
+ *
+ * Plain, hand-written CSS: no framework, no Node.js, no build step of its own. */
+
 :root {
-  color-scheme: light dark;
-  --border: color-mix(in srgb, currentColor 20%, transparent);
+  color-scheme: light;
+
+  --app-width: 430px;
+  --client-gutter: 26px;
+  --top-row-height: 42px;
+
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 26px;
+  --space-xl: 42px;
+
+  --font-caption: 10px;
+  --font-small: 12px;
+  --font-body: 16px;
+  --font-title: 26px;
+  --font-display: 42px;
+
+  --ink: #29151c;
+  --muted: #765f67;
+  --accent: #e73562;
+  --accent-dark: #c91f4d;
+  --accent-soft: #ffe5ec;
+  --rose-50: #fff8fa;
+  --rose-100: #fff0f4;
+  --rose-200: #ffd4df;
+  --line: #f0dfe4;
+  --white: #ffffff;
+  --canvas: #f4edef;
+  --shadow: 0 18px 55px rgba(118, 39, 63, 0.12);
+
+  /* Keyboard focus, everywhere it appears. */
+  --focus-ring: 3px solid rgba(231, 53, 98, 0.2);
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0 auto;
-  padding: 0 1.5rem 3rem;
-  max-width: 44rem;
-  font-family: system-ui, sans-serif;
-  line-height: 1.6;
+html {
+  min-width: 320px;
+  background: var(--canvas);
+  scrollbar-gutter: stable;
 }
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+/* --- Application shell ---------------------------------------------------
+ *
+ * One mobile column: full width below 430px, centred above it. There is no
+ * tablet or desktop composition. */
+
+.app-shell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: var(--app-width);
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  overflow: hidden;
+  flex-direction: column;
+  background: var(--rose-50);
+  box-shadow: var(--shadow);
+  isolation: isolate;
+}
+
+/* Decorative only: clipped by the shell, behind everything, and hidden from
+   assistive technology by having no content to expose. */
+.app-shell::before,
+.app-shell::after {
+  position: absolute;
+  z-index: -1;
+  width: 220px;
+  height: 220px;
+  border: 1px solid var(--rose-200);
+  border-radius: 50%;
+  content: "";
+  opacity: 0.6;
+}
+
+.app-shell::before {
+  top: 92px;
+  right: -160px;
+}
+
+.app-shell::after {
+  bottom: 124px;
+  left: -178px;
+}
+
+/* A flex column, so a short screen can push its primary action to the bottom
+   with `margin-top: auto`. The router renders each page's elements directly
+   here. */
+main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: var(--space-lg) var(--client-gutter) var(--space-md);
+}
+
+/* --- Top row ------------------------------------------------------------- */
 
 .site-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: baseline;
+  min-height: var(--top-row-height);
+  align-items: center;
   justify-content: space-between;
-  padding: 1.25rem 0;
-  border-bottom: 1px solid var(--border);
 }
 
-.site-title {
-  font-weight: 600;
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
 }
 
-nav {
-  display: flex;
-  gap: 1rem;
+.wordmark:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
 }
 
-a {
-  color: inherit;
+.wordmark-mark {
+  position: relative;
+  width: var(--space-lg);
+  height: var(--space-lg);
+  border: 2px solid var(--accent);
+  border-radius: 9px;
+  transform: rotate(-7deg);
 }
 
-a[aria-current="page"] {
-  font-weight: 600;
-  text-decoration-thickness: 2px;
+.wordmark-mark::after {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
 }
 
-/* The sign-in control. Absent entirely from an unconfigured build, so these
-   rules apply to a deployed page and to `just dev-web-auth`. */
-.auth {
-  display: flex;
-  gap: 0.75rem;
-  align-items: baseline;
-  font-size: 0.875rem;
-}
-
-.auth-email {
-  opacity: 0.7;
-}
-
-.auth button {
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: inherit;
+.profile-button {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  padding: 0;
+  overflow: hidden;
+  border: 3px solid var(--white);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 4px 13px rgba(111, 36, 60, 0.14);
   cursor: pointer;
+  place-items: center;
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
-.auth button:hover {
-  border-color: currentColor;
+.profile-button:hover {
+  box-shadow: 0 7px 18px rgba(111, 36, 60, 0.2);
+  transform: translateY(-1px);
+}
+
+.profile-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.profile-image {
+  width: 100%;
+  height: 100%;
+}
+
+/* Google's profile image is not square in every case, and the references only
+   ever hold an inline SVG here. */
+img.profile-image,
+img.account-image {
+  object-fit: cover;
+}
+
+/* --- Page heading -------------------------------------------------------- */
+
+.page-heading {
+  margin-top: var(--space-lg);
+  animation: enter 500ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  color: var(--accent-dark);
+  font-size: var(--font-small);
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  content: "";
 }
 
 h1 {
-  font-size: 1.5rem;
+  max-width: 350px;
+  margin: 0;
+  font-size: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+  /* Display copy this large is one long word away from leaving a 320-pixel
+     column, and a display name is not a word this file chose. */
+  overflow-wrap: break-word;
 }
 
-.greeting {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+h1 em {
+  color: var(--accent);
+  font-style: normal;
 }
 
+.lead {
+  max-width: 325px;
+  margin: var(--space-md) 0 0;
+  color: var(--muted);
+  font-size: var(--font-body);
+  line-height: 1.625;
+}
+
+/* --- Signed-out home ----------------------------------------------------- */
+
+.auth-panel {
+  margin-top: auto;
+  animation: enter 650ms 180ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.google-button {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  border: 1px solid #e6d6db;
+  border-radius: var(--space-md);
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: 0 7px 18px rgba(93, 40, 57, 0.07);
+  font-size: var(--font-body);
+  font-weight: 750;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.google-button:hover {
+  border-color: #d5aab6;
+  box-shadow: 0 10px 24px rgba(93, 40, 57, 0.11);
+  transform: translateY(-1px);
+}
+
+.google-button:active {
+  transform: translateY(1px);
+}
+
+.google-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.google-button svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* A failure — a refused sign-in, a call that did not answer — reported where
+   the recovery is rather than swallowed. Red is the brand here, so the message
+   carries the meaning in words. */
+.error-message {
+  margin: 0 0 var(--space-sm);
+  color: var(--accent-dark);
+  font-size: var(--font-small);
+  line-height: 1.5;
+}
+
+/* Whatever is still settling: the auth state at mount, or a fetch in flight. */
 .status {
-  opacity: 0.7;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-small);
 }
 
-.error {
-  color: #b00020;
+/* --- Signed-in home ------------------------------------------------------ */
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--space-md);
+  background: rgba(255, 255, 255, 0.66);
+  animation: enter 650ms 80ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
-@media (prefers-color-scheme: dark) {
-  .error {
-    color: #ff8a80;
+.account-image {
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 2px solid var(--white);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 3px 9px rgba(111, 36, 60, 0.12);
+}
+
+.account-image svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.account-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.account-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-button {
+  margin-left: auto;
+  padding: var(--space-xs) var(--space-sm);
+  flex: 0 0 auto;
+  border: 1px solid var(--rose-200);
+  border-radius: 10px;
+  color: var(--accent-dark);
+  background: var(--rose-100);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.logout-button:hover {
+  border-color: #f2a9bb;
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.logout-button:active {
+  transform: translateY(1px);
+}
+
+.logout-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.home-action {
+  margin-top: auto;
+  animation: enter 650ms 160ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* One link: the label, the message and the arrow are all inside the target. */
+.dashboard-card {
+  position: relative;
+  display: flex;
+  min-height: 192px;
+  overflow: hidden;
+  flex-direction: column;
+  padding: var(--space-lg);
+  border-radius: var(--space-lg);
+  color: var(--white);
+  background: var(--accent);
+  box-shadow: 0 16px 34px rgba(199, 30, 75, 0.22);
+  text-decoration: none;
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.dashboard-card::before,
+.dashboard-card::after {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  content: "";
+}
+
+.dashboard-card::before {
+  top: -70px;
+  right: -46px;
+  width: 175px;
+  height: 175px;
+}
+
+.dashboard-card::after {
+  top: 23px;
+  right: 30px;
+  width: 70px;
+  height: 70px;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 20px 40px rgba(199, 30, 75, 0.28);
+  transform: translateY(-2px);
+}
+
+.dashboard-card:focus-visible {
+  outline: 3px solid rgba(231, 53, 98, 0.22);
+  outline-offset: 4px;
+}
+
+.card-label {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 var(--space-sm);
+  font-size: var(--font-caption);
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.dashboard-card h2 {
+  position: relative;
+  z-index: 1;
+  max-width: 235px;
+  margin: 0;
+  font-size: var(--font-title);
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.card-link {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.arrow {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--accent-dark);
+  background: var(--white);
+  place-items: center;
+  transition: transform 180ms ease;
+}
+
+.dashboard-card:hover .arrow {
+  transform: translateX(3px);
+}
+
+.arrow svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* --- Dashboard summary --------------------------------------------------- */
+
+.summary-card {
+  position: relative;
+  display: grid;
+  min-height: 168px;
+  margin-top: var(--space-lg);
+  overflow: hidden;
+  grid-template-columns: 1fr auto;
+  padding: var(--space-lg);
+  border-radius: var(--space-lg);
+  color: var(--white);
+  background: var(--accent);
+  box-shadow: 0 16px 34px rgba(199, 30, 75, 0.2);
+  animation: enter 580ms 70ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.summary-card::before {
+  position: absolute;
+  top: -88px;
+  right: -62px;
+  width: 205px;
+  height: 205px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  content: "";
+}
+
+.summary-label {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: var(--font-caption);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.summary-number {
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  margin: 0;
+  font-size: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+}
+
+.summary-number .summary-unit {
+  margin-left: var(--space-xs);
+  font-size: var(--font-small);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  opacity: 0.83;
+}
+
+/* Supplemental: the card states the total in text, and the chart is hidden
+   from assistive technology. Bar heights arrive as an inline style, because
+   they are data. */
+.recent-chart {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 84px;
+  align-self: end;
+  gap: var(--space-xs);
+  align-items: end;
+}
+
+.bar {
+  display: block;
+  width: 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* The most recent day. */
+.bar.bar-today {
+  background: var(--white);
+}
+
+/* --- Dashboard recent actions -------------------------------------------- */
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin: var(--space-xl) 0 var(--space-xs);
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: var(--font-title);
+  letter-spacing: -0.035em;
+}
+
+.record-count {
+  color: #9d818a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.helper {
+  margin: 0 0 var(--space-md);
+  color: var(--muted);
+  font-size: var(--font-small);
+  line-height: 1.5;
+}
+
+.activity-list {
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--space-lg);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 10px 28px rgba(93, 40, 57, 0.055);
+  list-style: none;
+  animation: enter 600ms 130ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.activity-item + .activity-item {
+  border-top: 1px solid var(--line);
+}
+
+/* The whole row is the target: it represents one action. */
+.activity-link {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+
+.activity-link:hover {
+  background: var(--rose-100);
+}
+
+.activity-link:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid rgba(231, 53, 98, 0.18);
+  outline-offset: -3px;
+}
+
+.activity-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.activity-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.activity-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.activity-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-time {
+  color: #9a7f88;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.activity-value {
+  margin-left: auto;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.activity-value span {
+  color: #9a7f88;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.repeat-icon {
+  display: grid;
+  width: var(--space-lg);
+  height: var(--space-lg);
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--accent-dark);
+  background: var(--rose-100);
+  place-items: center;
+}
+
+.repeat-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* --- Fallback view ------------------------------------------------------- */
+
+.not-found {
+  margin-top: var(--space-lg);
+  animation: enter 500ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.text-link {
+  display: inline-block;
+  margin-top: var(--space-md);
+  color: var(--accent-dark);
+  font-size: var(--font-body);
+  font-weight: 800;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.text-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.site-footer {
+  margin: 0 var(--client-gutter);
+  padding: var(--space-md) 0 var(--space-lg);
+  border-top: 1px solid var(--line);
+  color: #a98d96;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* --- Motion -------------------------------------------------------------- */
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Short viewports contract the gaps rather than scaling the content down. */
+@media (max-height: 720px) {
+  main {
+    padding-top: var(--space-md);
+  }
+
+  .page-heading {
+    margin-top: var(--space-md);
+  }
+
+  .lead {
+    margin-top: var(--space-sm);
+  }
+
+  .account {
+    margin-top: var(--space-md);
+  }
+
+  .dashboard-card {
+    min-height: 162px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
