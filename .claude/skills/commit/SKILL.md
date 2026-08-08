@@ -1,7 +1,7 @@
 ---
 name: commit
 description: Create a git commit for staged changes following Conventional Commits specification.
-allowed-tools: Bash(git commit *) Bash(git status *) Bash(git diff *) Bash(ls *) Bash(rg *) Read Write Edit
+allowed-tools: Bash(git commit *) Bash(git status *) Bash(git diff *) Bash(git log *) Bash(ls *) Bash(rg *) Read Write Edit
 ---
 
 # Git Commit with Conventional Commits
