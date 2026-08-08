@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-05
+Updated: 2026-08-07
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -51,3 +51,4 @@ Not yet written, because it does not exist yet:
 | [DR-0007](../decisions/DR-0007-the-hosted-ui-domain-prefix-does-not-echo-the-project-name.md) | The Cognito hosted-UI domain prefix does not echo the project name |
 | [DR-0008](../decisions/DR-0008-the-spa-is-configured-at-compile-time.md) | The SPA receives its configuration at compile time, not at runtime |
 | [DR-0009](../decisions/DR-0009-cors-is-answered-by-the-http-api.md) | CORS is answered by the HTTP API, so `/api` routes are declared per method |
+| [DR-0010](../decisions/DR-0010-the-spa-signs-in-through-the-hosted-ui-by-hand.md) | The SPA signs in through the hosted UI, with a PKCE flow written by hand |

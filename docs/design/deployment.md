@@ -1,12 +1,11 @@
 # Deployment
 
-Updated: 2026-08-05
+Updated: 2026-08-07
 
 Note: all four layers have been applied, all ten SSM parameters exist, and both
-artefacts have been deployed on top of them. The CloudFront domain serves the
-SPA and `GET /health` on the API returns `ok`. `GET /api/greeting` returns 401,
-because the SPA carries no access token yet — the one remaining gap, and the
-last Constraint below.
+artefacts have been deployed on top of them. The SPA now signs in and carries an
+access token (DR-0010), but the deployed bundle predates that work: closing the
+gap on the deployed page takes one `just deploy-web`, which has not been run.
 
 ## Purpose
 
@@ -118,8 +117,8 @@ what it needs with the `aws_ssm_parameter` data source.
 | `/<project>/delivery/spa_bucket` | `delivery` | `just deploy-web` |
 | `/<project>/identity/user_pool_id` | `identity` | operators, so the pool is addressable without reading state |
 | `/<project>/identity/user_pool_issuer` | `identity` | `api`, for the JWT authorizer |
-| `/<project>/identity/app_client_id` | `identity` | `api`, as the authorizer's audience; the SPA build once sign-in exists |
-| `/<project>/identity/hosted_ui_domain` | `identity` | the SPA build once sign-in exists |
+| `/<project>/identity/app_client_id` | `identity` | `api`, as the authorizer's audience; the SPA build, as `COGNITO_CLIENT_ID` |
+| `/<project>/identity/hosted_ui_domain` | `identity` | the SPA build, as `COGNITO_HOSTED_UI_DOMAIN` |
 | `/<project>/api/api_endpoint` | `api` | `just deploy-web`, as `API_BASE_URL` |
 | `/<project>/api/lambda_function_name` | `api` | `just deploy-api` |
 
@@ -127,6 +126,9 @@ The build and the deploy commands are the second consumer of these parameters,
 which is why they are published rather than passed through state. Two are read
 by nothing automated: they are published so that an operator can find the bucket
 and the pool without opening state, which is the same reason as the rest.
+
+`just dev-web-auth` is the third consumer, reading the two `identity` parameters
+so the sign-in flow can be exercised against `trunk serve`.
 
 ### The API's runtime shape
 
@@ -174,10 +176,10 @@ deploy needs neither `infra/backend.hcl` nor a `terraform init`. The two are
 independent and have no ordering between them, which is DR-0001 showing up in
 the task runner; there is deliberately no recipe that runs both.
 
-**Frontend — `just deploy-web`.** Resolve the API endpoint from SSM and hand it
-to `trunk build --release` as `API_BASE_URL` — see "Configuring the SPA" below —
-then four uploads and an invalidation. The uploads are split because `dist/` is
-not homogeneous:
+**Frontend — `just deploy-web`.** Resolve the three build variables from SSM and
+hand them to `trunk build --release` — see "Configuring the SPA" below — then
+four uploads and an invalidation. The uploads are split because `dist/` is not
+homogeneous:
 
 | Pass | Contents | `Cache-Control` |
 | --- | --- | --- |
@@ -205,29 +207,35 @@ the glibc constraint below.
 
 ### Configuring the SPA
 
-The SPA needs the API endpoint, and the sign-in flow will need the Cognito app
-client id and the hosted-UI domain. Each such value is read from SSM and passed
-to `trunk build` as an environment variable, which the crate reads at compile
-time rather than fetching at runtime — DR-0008. No hostname is written into the
-source — the constraint in `docs/design/frontend.md` holds — and because the
-values land inside a content-hashed bundle, a configuration change invalidates
-its own cache entry.
+The SPA needs the API endpoint, the Cognito app client id and the hosted-UI
+domain. Each is read from SSM and passed to `trunk build` as an environment
+variable, which the crate reads at compile time rather than fetching at runtime —
+DR-0008. No hostname is written into the source — the constraint in
+`docs/design/frontend.md` holds — and because the values land inside a
+content-hashed bundle, a configuration change invalidates its own cache entry.
 
 | Variable | Source | Read by |
 | --- | --- | --- |
 | `API_BASE_URL` | `/<project>/api/api_endpoint`, trailing slash stripped | `crates/app/src/api.rs` |
+| `COGNITO_CLIENT_ID` | `/<project>/identity/app_client_id` | `crates/app/src/auth.rs` |
+| `COGNITO_HOSTED_UI_DOMAIN` | `/<project>/identity/hosted_ui_domain` | `crates/app/src/auth.rs` |
 
-Only the endpoint is wired. The app client id and the hosted-UI domain are
-published in SSM but passed to no build, because nothing under `crates/` reads
-them: they are inputs to the sign-in flow, which does not exist — the last
-Constraint below.
+All three are set by `just deploy-web`. There is deliberately no fourth for the
+redirect URI: `auth.rs` computes it from `window.location.origin`, so it is
+whatever origin serves the page and cannot drift from the callback URLs the app
+client registers — DR-0010.
 
-`API_BASE_URL` is unset in development, and an unset value means the empty
-string, which leaves every call relative and therefore served by the trunk proxy.
-That default is what makes the same code single-origin locally and cross-origin
-in production. Cargo tracks the variable through `option_env!`, so changing it
-rebuilds the crate rather than silently reusing a bundle built against a
-different endpoint.
+Every one is unset in development, and every unset value means something
+workable. `API_BASE_URL` becomes the empty string, which leaves each call
+relative and therefore served by the trunk proxy — the default that makes the
+same code single-origin locally and cross-origin in production. An empty
+`COGNITO_*` pair disables sign-in: no control, no `Authorization` header, and the
+local API answers anyway because it validates nothing. `just dev-web-auth`
+supplies the two real values when the flow itself is being worked on.
+
+Cargo tracks variables reached through `option_env!`, so changing one rebuilds
+the crate rather than silently reusing a bundle built against a different
+endpoint or a different user pool.
 
 ## Constraints
 
@@ -318,15 +326,18 @@ different endpoint.
   `archive_file`. It exists so the first create has bytes to upload and is never
   the running code; it exits non-zero if it ever is.
 
-- **The SPA sends no `Authorization` header yet.** `crates/app/src/api.rs`
-  reaches the right endpoint but attaches nothing to the request, so every call
-  under `/api` returns 401 and the SPA renders that status as its error. This is
-  the one gap left between a deployed stack and a working page. The authorizer is
-  what this document specifies and the configuration implements it; closing the
-  gap is frontend work — the hosted-UI redirect, the PKCE exchange, somewhere to
-  keep the token, and the header — and has not been done. The `identity` layer
-  already publishes both values that work needs, `app_client_id` and
-  `hosted_ui_domain`.
+- **A bundle built without the two Cognito variables cannot call the API.** The
+  SPA obtains a token and attaches it (DR-0010), but only when
+  `COGNITO_CLIENT_ID` and `COGNITO_HOSTED_UI_DOMAIN` were set at build time.
+  Unset, it sends no header — correct locally, where the axum server validates
+  nothing, and a 401 on every `/api` call once deployed. `just deploy-web` sets
+  both, so the way to produce that bundle is to build it by some other route.
+
+- **One app client, so a token obtained locally is one the deployed API
+  accepts.** Both origins are registered on the same client and the authorizer's
+  audience is that client's id. This is what allows the deployed API to be tested
+  with a token from `just dev-web-auth`, and it is a consequence of the
+  single-client decision above rather than a separate arrangement.
 
 - **The Lambda is `x86_64`.** It matches the devcontainer's native Rust target,
   so `crates/server` builds for it without a cross-compiler. Moving to arm64
