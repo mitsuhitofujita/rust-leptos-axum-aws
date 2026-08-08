@@ -189,7 +189,26 @@ DR-0011 rather than observed, and would first be seen against a deployed bundle.
 
 ## Retirement
 
-- [ ] Design Documents updated — drafted, awaiting confirmation
+- [x] Design Documents updated — `frontend.md`, `page-layouts.md`, `index.md`
 - [x] Decision Records written (DR-0011)
 - [x] Non-obvious knowledge preserved — rejected alternatives, pitfalls, constraints
-- [ ] No durable document depends on this log
+- [x] No durable document depends on this log
+
+The durable layer is complete and this log is held open for one reason: the five
+browser checks under Verification have not been run. They are the last thing
+between here and deletion.
+
+Four findings would otherwise be lost with this log, none of them a decision and
+none belonging to this work. They are the inputs to whichever unit picks them up:
+
+- A Content Security Policy for the delivered bundle, blocked on `dist/index.html`
+  carrying one inline `<script type="module">` whose hash changes every build, so
+  `script-src 'self'` needs a header generated per deploy.
+- The account email: `docs/design/page-layouts.md` requires it in the signed-in
+  home's account strip, `crates/app/src/home.rs` does not render it, and
+  `auth.rs` stores it.
+- Server-side identity — scoping data by the authorizer-verified `sub` once
+  action types and actions exist, which interacts with local development having
+  no authorizer in front of it.
+- `docs/design/index.md:33` still describes the backend as serving
+  `GET /api/greeting`, where `crates/server/src/main.rs` routes `/api/dashboard`.
