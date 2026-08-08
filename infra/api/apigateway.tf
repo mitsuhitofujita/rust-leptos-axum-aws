@@ -44,7 +44,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 }
 
 # Everything the SPA calls sits behind the authorizer. crates/server serves
-# /api/greeting today; {proxy+} means a new endpoint under /api needs no change
+# /api/dashboard today; {proxy+} means a new endpoint under /api needs no change
 # here.
 #
 # One route per method rather than a single ANY route: ANY matches OPTIONS too,

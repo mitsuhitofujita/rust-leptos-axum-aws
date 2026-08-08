@@ -48,9 +48,17 @@ resource "aws_cognito_identity_provider" "google" {
   }
 
   # Google's `sub` becomes the pool's username, so a user who changes their
-  # Google email address stays the same user.
+  # Google email address stays the same user. It is a numeric identifier with
+  # nothing displayable in it, which is why `name` and `picture` are mapped
+  # too: the SPA greets the visitor by display name and shows the profile
+  # image, and neither claim reaches the id token unless it is mapped here.
+  #
+  # All four are Cognito standard attributes and the pool declares no explicit
+  # schema, so mapping them updates the provider in place.
   attribute_mapping = {
     email    = "email"
+    name     = "name"
+    picture  = "picture"
     username = "sub"
   }
 }
