@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-07
+Updated: 2026-08-08
 
 ## Purpose
 
@@ -16,7 +16,10 @@ The application lives in `crates/app` and is compiled to
 | File | Role |
 | --- | --- |
 | `crates/app/src/main.rs` | Installs the panic hook, mounts `App` to `<body>` |
-| `crates/app/src/app.rs` | The router and every component |
+| `crates/app/src/app.rs` | The router, the shared shell, the auth context and the route guard |
+| `crates/app/src/home.rs` | `/` — the signed-out and signed-in compositions of one screen |
+| `crates/app/src/dashboard.rs` | `/dashboard` — the ten-day summary and the recent records |
+| `crates/app/src/icons.rs` | The inline SVGs the screens share |
 | `crates/app/src/api.rs` | Calls to the API, returning `shared` types |
 | `crates/app/src/auth.rs` | Sign-in against the Cognito hosted UI, and the token it yields |
 
@@ -35,9 +38,26 @@ the workspace manifest is virtual and cannot itself be a trunk target:
 the deployable artefact and is not committed.
 
 **Routing.** `leptos_router`'s `<Router>` wraps a `<Routes>` block declaring
-`/` (`HomePage`) and `/about` (`AboutPage`), with a `NotFound` fallback.
+`/` (`HomePage`) and `/dashboard` (`DashboardPage`), with a `NotFound` fallback.
 Navigation uses `<A>`, which renders `aria-current="page"` on the active link —
 the CSS styles that attribute rather than tracking the active route by hand.
+
+**Route guarding.** `/dashboard` is wrapped in `RequireAuth`, and every screen
+added behind a session is wrapped the same way, so the route table is where the
+requirement is visible. The guard maps the five auth states onto three outcomes:
+`SignedIn` and `Disabled` render the screen, `Loading` holds with the same
+"Checking your session…" copy the home screen shows, and `SignedOut` and `Error`
+redirect to `/` — replacing the history entry rather than pushing one. The
+mapping goes through a `Memo` so a state change that leaves the outcome alone
+does not rebuild the screen behind it (DR-0011).
+
+`/` is not guarded in either direction. Authentication changes what it renders
+and never where the visitor is, and a signed-in visitor arriving there stays
+there.
+
+The guard decides nothing about access. API Gateway's authorizer is the only
+enforcement point; `RequireAuth` exists so an unauthenticated visitor never
+lands on a screen that can only fail (DR-0011).
 
 **Data fetching.** `crates/app/src/api.rs` holds one async function per
 endpoint. Each returns `Result<T, ApiError>` where `T` comes from
@@ -58,19 +78,28 @@ through context: `Loading` until the callback has been dealt with, then
 `Disabled`, `SignedOut`, `SignedIn` or `Error`. The header renders a control from
 it, and nothing at all when the state is `Disabled`.
 
-The access token, its expiry and the email live in `sessionStorage`. No refresh
-token is kept: an expired session sends the visitor back to the hosted UI. A 401
-drops the token and offers a fresh sign-in rather than redirecting, which would
-loop for any 401 a new token cannot fix.
+The access token, its expiry and the claims read for display live in
+`sessionStorage`. No refresh token is kept: an expired session sends the visitor
+back to the hosted UI. The signal is what screens render from; storage is only
+what lets a reload recover the session.
+
+A 401 drops the session and nothing more. `note_unauthorized` in `app.rs` is the
+one place that does it, and the guard is what then moves the visitor to a home
+screen offering a fresh sign-in. Nothing redirects to the hosted UI on its own,
+which would loop for any 401 a new token cannot fix (DR-0010). Only a signed-in
+state transitions, so a 401 arriving with no token to blame changes nothing.
 
 The redirect URI is not configured — it is `window.location.origin` with a
 trailing slash, so it is the CloudFront domain in a deployed build and
 `http://localhost:8080/` under `trunk serve`, both already registered on the app
 client.
 
-`HomePage`'s `LocalResource` reads the auth signal in its source closure. That is
-load-bearing rather than incidental: the state settling is what must re-run the
-fetch, or the first request after a sign-in leaves before the token is stored.
+A guarded screen may assume a settled auth state. `RequireAuth` renders nothing
+while the state is `Loading`, so the token is already stored by the time the
+screen exists and its resource can fire immediately, without watching the auth
+signal to find out when it is safe to. That holds only for screens behind the
+guard — rendering one from an unguarded route would send its first request
+before the token is there (DR-0011).
 
 **Compile-time configuration** is three environment variables, each read once
 through `option_env!` into a constant, and each with an unset value that means
@@ -90,10 +119,10 @@ anyway. That is what keeps development needing no configuration at all.
 
 ## Interfaces
 
-**Consumes** `GET /api/greeting` → `shared::Greeting`, as an absolute path joined
-to `API_BASE_URL`, carrying a bearer token when there is one. No API hostname
-appears in the source; the origin arrives at build time, or not at all in
-development.
+**Consumes** `GET /api/dashboard` → `shared::Dashboard`, as an absolute path
+joined to `API_BASE_URL`, carrying a bearer token when there is one. No API
+hostname appears in the source; the origin arrives at build time, or not at all
+in development.
 
 **Consumes** the Cognito hosted UI's `/oauth2/authorize`, `/oauth2/token` and
 `/logout`, at the domain `COGNITO_HOSTED_UI_DOMAIN` names.
@@ -123,13 +152,18 @@ off (DR-0003).
   header, which `auth.rs` obtains from the hosted UI and `api.rs` attaches — but
   only in a build configured for it. An unconfigured build sends no header, which
   the local API accepts and API Gateway does not, so a deployed bundle built
-  without the two Cognito variables renders a 401 where the greeting belongs.
+  without the two Cognito variables fails every call it makes.
   Configuration is what distinguishes the two, not code — DR-0010.
-
 - The token is never validated in the browser. Expiry is checked so an expired
-  one is not sent, and the id token's `email` claim is decoded to label the
-  header, but neither is a signature check: API Gateway's authorizer is the
+  one is not sent, and the id token is decoded once for the claims the screens
+  display, but neither is a signature check: API Gateway's authorizer is the
   security boundary — DR-0010.
+- The route guard is not part of that boundary. It keeps a visitor off a screen
+  that could only fail, and decides nothing a server would otherwise decide —
+  DR-0011.
+- A screen behind `RequireAuth` may assume a settled auth state and a stored
+  token. Rendering one from an unguarded route reintroduces the race the guard
+  removes — DR-0011.
 - Deep links are router paths, not files. `trunk serve` serves `index.html` for
   unknown paths, and the production host must be configured to do the same, or
   reloading on any non-root route fails — DR-0001.

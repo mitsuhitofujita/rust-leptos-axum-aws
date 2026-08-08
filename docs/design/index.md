@@ -54,3 +54,4 @@ Not yet written, because it does not exist yet:
 | [DR-0008](../decisions/DR-0008-the-spa-is-configured-at-compile-time.md) | The SPA receives its configuration at compile time, not at runtime |
 | [DR-0009](../decisions/DR-0009-cors-is-answered-by-the-http-api.md) | CORS is answered by the HTTP API, so `/api` routes are declared per method |
 | [DR-0010](../decisions/DR-0010-the-spa-signs-in-through-the-hosted-ui-by-hand.md) | The SPA signs in through the hosted UI, with a PKCE flow written by hand |
+| [DR-0011](../decisions/DR-0011-authenticated-screens-are-guarded-in-the-router.md) | Authenticated screens are guarded in the router, as experience rather than enforcement |

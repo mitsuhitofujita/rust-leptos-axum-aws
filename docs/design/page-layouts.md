@@ -147,7 +147,14 @@ signed-out home ── Google sign-in ──▶ signed-in home
 signed-in home ── Open dashboard ──▶ dashboard
 dashboard recent row ──────────────▶ add action (type preselected)
 authenticated avatar ──────────────▶ action-type access
+any application screen, unauthenticated ─▶ signed-out home
 ```
+
+An unauthenticated visitor reaching an application screen is returned to the
+signed-out home, which is where signing in happens. The intended destination is
+not remembered; the visitor arrives at home and continues from there. Home
+itself is never redirected away from, in either direction — it is one screen with
+two states, not a pair of screens (DR-0011).
 
 Authentication behavior and the current implemented router belong to
 [Frontend](frontend.md); this document supplies the intended screen behavior
