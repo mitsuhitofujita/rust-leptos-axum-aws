@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Home — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --top-row-height: 42px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --font-display: 42px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+        --shadow: 0 18px 55px rgba(118, 39, 63, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: #f4edef;
+        scrollbar-gutter: stable;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      .app-shell {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow: hidden;
+        flex-direction: column;
+        background: var(--rose-50);
+        box-shadow: var(--shadow);
+        isolation: isolate;
+      }
+
+      .app-shell::before,
+      .app-shell::after {
+        position: absolute;
+        z-index: -1;
+        width: 220px;
+        height: 220px;
+        border: 1px solid var(--rose-200);
+        border-radius: 50%;
+        content: "";
+        opacity: 0.6;
+      }
+
+      .app-shell::before {
+        top: 92px;
+        right: -160px;
+      }
+
+      .app-shell::after {
+        bottom: 124px;
+        left: -178px;
+      }
+
+      main {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        padding: var(--space-lg) var(--client-gutter) var(--space-md);
+      }
+
+      .page-title {
+        display: inline-flex;
+        width: fit-content;
+        min-height: var(--top-row-height);
+        align-items: center;
+        gap: var(--space-sm);
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        text-decoration: none;
+      }
+
+      .title-mark {
+        position: relative;
+        width: var(--space-lg);
+        height: var(--space-lg);
+        border: 2px solid var(--accent);
+        border-radius: 9px;
+        transform: rotate(-7deg);
+      }
+
+      .title-mark::after {
+        position: absolute;
+        right: 5px;
+        bottom: 5px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+      }
+
+      .intro {
+        margin-top: var(--space-lg);
+        animation: enter 600ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin: 0 0 var(--space-md);
+        color: var(--accent-dark);
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 18px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        content: "";
+      }
+
+      h1 {
+        max-width: 350px;
+        margin: 0;
+        font-size: var(--font-display);
+        font-weight: 800;
+        letter-spacing: -0.065em;
+        line-height: 0.98;
+      }
+
+      h1 em {
+        color: var(--accent);
+        font-style: normal;
+      }
+
+      .lead {
+        max-width: 325px;
+        margin: var(--space-md) 0 0;
+        color: var(--muted);
+        font-size: var(--font-body);
+        line-height: 1.625;
+      }
+
+      .auth-panel {
+        margin-top: auto;
+        animation: enter 650ms 180ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .google-button {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-sm);
+        border: 1px solid #e6d6db;
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: var(--white);
+        box-shadow: 0 7px 18px rgba(93, 40, 57, 0.07);
+        font-size: var(--font-body);
+        font-weight: 750;
+        cursor: pointer;
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .google-button:hover {
+        border-color: #d5aab6;
+        box-shadow: 0 10px 24px rgba(93, 40, 57, 0.11);
+        transform: translateY(-1px);
+      }
+
+      .google-button:active {
+        transform: translateY(1px);
+      }
+
+      .google-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .google-button svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .site-footer {
+        margin: 0 var(--client-gutter);
+        padding: var(--space-md) 0 var(--space-lg);
+        border-top: 1px solid var(--line);
+        color: #a98d96;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-height: 720px) {
+        main {
+          padding-top: var(--space-md);
+        }
+
+        .intro {
+          margin-top: var(--space-md);
+        }
+
+        h1 {
+          font-size: var(--font-display);
+        }
+
+        .lead {
+          margin-top: var(--space-sm);
+        }
+
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main>
+        <a class="page-title" href="#" aria-label="actord home">
+          <span class="title-mark" aria-hidden="true"></span>
+          <span>actord</span>
+        </a>
+
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">Small actions, real progress</p>
+          <h1 id="page-title">Make every<br /><em>action count.</em></h1>
+          <p class="lead">
+            Record the things you do, add the numbers that matter, and watch
+            your everyday effort take shape.
+          </p>
+        </section>
+
+        <section class="auth-panel" aria-label="Sign in">
+          <button class="google-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.25c1.9-1.75 2.97-4.33 2.97-7.4Z" />
+              <path fill="#34A853" d="M12 22c2.71 0 4.99-.9 6.65-2.43l-3.25-2.54c-.9.6-2.05.96-3.4.96-2.62 0-4.84-1.77-5.63-4.15H3.01v2.62A10.04 10.04 0 0 0 12 22Z" />
+              <path fill="#FBBC05" d="M6.37 13.84A6.02 6.02 0 0 1 6.06 12c0-.64.11-1.26.31-1.84V7.54H3.01A10.04 10.04 0 0 0 2 12c0 1.61.39 3.14 1.01 4.46l3.36-2.62Z" />
+              <path fill="#EA4335" d="M12 6.01c1.47 0 2.79.51 3.83 1.5l2.88-2.88A9.65 9.65 0 0 0 12 2a10.04 10.04 0 0 0-8.99 5.54l3.36 2.62C7.16 7.78 9.38 6.01 12 6.01Z" />
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+        </section>
+      </main>
+
+      <footer class="site-footer">actord</footer>
+    </div>
+  </body>
+</html>

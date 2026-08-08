@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-07
+Updated: 2026-08-08
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -22,6 +22,8 @@ identities.
 | --- | --- |
 | [workspace.md](workspace.md) | Crate layout, dependency management, toolchain, task runner |
 | [frontend.md](frontend.md) | The Leptos SPA: routing, data fetching, build, assets |
+| [visual-design.md](visual-design.md) | Mobile shell, design tokens, typography, surfaces, motion, accessibility |
+| [page-layouts.md](page-layouts.md) | Screen inventory, information hierarchy, and navigation intent |
 | [deployment.md](deployment.md) | AWS runtime, the Terraform layering, artefact deployment |
 
 Not yet written, because it does not exist yet:

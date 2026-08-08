@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Home — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --top-row-height: 42px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --font-display: 42px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+        --shadow: 0 18px 55px rgba(118, 39, 63, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: #f4edef;
+        scrollbar-gutter: stable;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      .app-shell {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow: hidden;
+        flex-direction: column;
+        background: var(--rose-50);
+        box-shadow: var(--shadow);
+        isolation: isolate;
+      }
+
+      .app-shell::before,
+      .app-shell::after {
+        position: absolute;
+        z-index: -1;
+        width: 220px;
+        height: 220px;
+        border: 1px solid var(--rose-200);
+        border-radius: 50%;
+        content: "";
+        opacity: 0.6;
+      }
+
+      .app-shell::before {
+        top: 92px;
+        right: -160px;
+      }
+
+      .app-shell::after {
+        bottom: 124px;
+        left: -178px;
+      }
+
+      main {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        padding: var(--space-lg) var(--client-gutter) var(--space-md);
+      }
+
+      .page-title {
+        display: inline-flex;
+        width: fit-content;
+        min-height: var(--top-row-height);
+        align-items: center;
+        gap: var(--space-sm);
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        text-decoration: none;
+      }
+
+      .title-mark {
+        position: relative;
+        width: var(--space-lg);
+        height: var(--space-lg);
+        border: 2px solid var(--accent);
+        border-radius: 9px;
+        transform: rotate(-7deg);
+      }
+
+      .title-mark::after {
+        position: absolute;
+        right: 5px;
+        bottom: 5px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+      }
+
+      .intro {
+        margin-top: var(--space-lg);
+        animation: enter 600ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin: 0 0 var(--space-md);
+        color: var(--accent-dark);
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 18px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        content: "";
+      }
+
+      h1 {
+        max-width: 350px;
+        margin: 0;
+        font-size: var(--font-display);
+        font-weight: 800;
+        letter-spacing: -0.065em;
+        line-height: 0.98;
+      }
+
+      h1 em {
+        color: var(--accent);
+        font-style: normal;
+      }
+
+      .lead {
+        max-width: 325px;
+        margin: var(--space-md) 0 0;
+        color: var(--muted);
+        font-size: var(--font-body);
+        line-height: 1.625;
+      }
+
+      .account {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin-top: var(--space-lg);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--line);
+        border-radius: var(--space-md);
+        background: rgba(255, 255, 255, 0.66);
+        animation: enter 650ms 80ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .account-image {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        overflow: hidden;
+        border: 2px solid var(--white);
+        border-radius: 50%;
+        background: var(--accent-soft);
+        box-shadow: 0 3px 9px rgba(111, 36, 60, 0.12);
+      }
+
+      .account-image svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .account-copy {
+        display: grid;
+        min-width: 0;
+        gap: var(--space-2xs);
+      }
+
+      .account-name {
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .account-email {
+        overflow: hidden;
+        color: #927780;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .logout-button {
+        margin-left: auto;
+        padding: var(--space-xs) var(--space-sm);
+        flex: 0 0 auto;
+        border: 1px solid var(--rose-200);
+        border-radius: 10px;
+        color: var(--accent-dark);
+        background: var(--rose-100);
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          border-color 180ms ease,
+          background-color 180ms ease,
+          transform 180ms ease;
+      }
+
+      .logout-button:hover {
+        border-color: #f2a9bb;
+        background: var(--accent-soft);
+        transform: translateY(-1px);
+      }
+
+      .logout-button:active {
+        transform: translateY(1px);
+      }
+
+      .logout-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 2px;
+      }
+
+      .home-action {
+        margin-top: auto;
+        animation: enter 650ms 160ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .dashboard-card {
+        position: relative;
+        display: flex;
+        min-height: 192px;
+        overflow: hidden;
+        flex-direction: column;
+        padding: var(--space-lg);
+        border-radius: var(--space-lg);
+        color: var(--white);
+        background: var(--accent);
+        box-shadow: 0 16px 34px rgba(199, 30, 75, 0.22);
+        text-decoration: none;
+        transition:
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .dashboard-card::before,
+      .dashboard-card::after {
+        position: absolute;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .dashboard-card::before {
+        top: -70px;
+        right: -46px;
+        width: 175px;
+        height: 175px;
+      }
+
+      .dashboard-card::after {
+        top: 23px;
+        right: 30px;
+        width: 70px;
+        height: 70px;
+      }
+
+      .dashboard-card:hover {
+        box-shadow: 0 20px 40px rgba(199, 30, 75, 0.28);
+        transform: translateY(-2px);
+      }
+
+      .dashboard-card:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.22);
+        outline-offset: 4px;
+      }
+
+      .card-label {
+        position: relative;
+        z-index: 1;
+        margin: 0 0 var(--space-sm);
+        font-size: var(--font-caption);
+        font-weight: 800;
+        letter-spacing: 0.15em;
+        opacity: 0.82;
+        text-transform: uppercase;
+      }
+
+      .dashboard-card h2 {
+        position: relative;
+        z-index: 1;
+        max-width: 235px;
+        margin: 0;
+        font-size: var(--font-title);
+        letter-spacing: -0.045em;
+        line-height: 1.08;
+      }
+
+      .card-link {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .arrow {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        color: var(--accent-dark);
+        background: var(--white);
+        place-items: center;
+        transition: transform 180ms ease;
+      }
+
+      .dashboard-card:hover .arrow {
+        transform: translateX(3px);
+      }
+
+      .arrow svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .site-footer {
+        margin: 0 var(--client-gutter);
+        padding: var(--space-md) 0 var(--space-lg);
+        border-top: 1px solid var(--line);
+        color: #a98d96;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-height: 720px) {
+        main {
+          padding-top: var(--space-md);
+        }
+
+        .intro {
+          margin-top: var(--space-md);
+        }
+
+        h1 {
+          font-size: var(--font-display);
+        }
+
+        .lead {
+          margin-top: var(--space-sm);
+        }
+
+        .account {
+          margin-top: var(--space-md);
+        }
+
+        .dashboard-card {
+          min-height: 162px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main>
+        <a class="page-title" href="#" aria-label="actord home">
+          <span class="title-mark" aria-hidden="true"></span>
+          <span>actord</span>
+        </a>
+
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">Welcome back</p>
+          <h1 id="page-title">Hello,<br /><em>Alex.</em></h1>
+          <p class="lead">
+            Your everyday actions are yours to shape. Keep showing up, one
+            record at a time.
+          </p>
+        </section>
+
+        <div class="account" aria-label="Signed-in account">
+          <span class="account-image">
+            <svg viewBox="0 0 48 48" role="img" aria-label="Alex's profile image">
+              <rect width="48" height="48" fill="#ffdce5" />
+              <circle cx="24" cy="18" r="9" fill="#c94a69" />
+              <path d="M8 48c1.4-10.1 7.1-15.2 16-15.2S38.6 37.9 40 48" fill="#7d2c45" />
+              <path d="M16 16.8c.7-6.5 4.1-9.7 9.8-9.7 5.4 0 8.4 3.7 8.2 9.4-2.9-1.1-5.6-3.2-7.4-5.3-2.5 3.3-6 5.2-10.6 5.6Z" fill="#512432" />
+            </svg>
+          </span>
+          <span class="account-copy">
+            <span class="account-name">Alex Morgan</span>
+            <span class="account-email">alex.morgan@example.com</span>
+          </span>
+          <button class="logout-button" type="button">Log out</button>
+        </div>
+
+        <section class="home-action" aria-label="Dashboard">
+          <a class="dashboard-card" href="#">
+            <p class="card-label">Your space</p>
+            <h2>See every action in one place.</h2>
+            <span class="card-link">
+              <span>Open dashboard</span>
+              <span class="arrow" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            </span>
+          </a>
+        </section>
+      </main>
+
+      <footer class="site-footer">actord</footer>
+    </div>
+  </body>
+</html>
