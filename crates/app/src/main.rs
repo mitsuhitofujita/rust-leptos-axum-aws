@@ -1,5 +1,6 @@
 mod api;
 mod app;
+mod auth;
 
 use app::App;
 

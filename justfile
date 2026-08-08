@@ -10,6 +10,21 @@ default:
 dev-web:
     trunk serve
 
+# Unset COGNITO_* variables mean no sign-in control and no Authorization header
+# (DR-0008), which is what `dev-web` above gets and what most development wants:
+# the local axum server checks nothing. This recipe is for working on the flow
+# itself. The app client already lists http://localhost:8080/ among its callback
+# and logout URLs, so no infrastructure change is needed to sign in locally.
+
+# The same dev server with sign-in switched on. Needs AWS credentials.
+dev-web-auth:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    COGNITO_CLIENT_ID="$(just _ssm identity/app_client_id)" \
+    COGNITO_HOSTED_UI_DOMAIN="$(just _ssm identity/hosted_ui_domain)" \
+        trunk serve
+
 # API dev server on http://localhost:3000.
 dev-api:
     cargo run -p server
@@ -100,13 +115,19 @@ deploy-web:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # crates/app/src/api.rs reads API_BASE_URL at compile time, so the endpoint
-    # is resolved here and handed to the build. The trailing slash API Gateway
-    # publishes on the $default stage's invoke URL is dropped, which the crate
-    # also guards against. The app client id and the hosted-UI domain are not
-    # passed yet: nothing in crates/ reads them.
+    # The SPA is configured at compile time (DR-0008), so every value it needs
+    # is resolved here and handed to the build: the endpoint for
+    # crates/app/src/api.rs, and the app client and hosted-UI domain for
+    # crates/app/src/auth.rs. The trailing slash API Gateway publishes on the
+    # $default stage's invoke URL is dropped, which the crate also guards
+    # against. There is no redirect URI among these: auth.rs computes it from
+    # window.location.origin, so it cannot drift from the app client's
+    # registered callback URLs.
     api_endpoint="$(just _ssm api/api_endpoint)"
-    API_BASE_URL="${api_endpoint%/}" trunk build --release
+    API_BASE_URL="${api_endpoint%/}" \
+    COGNITO_CLIENT_ID="$(just _ssm identity/app_client_id)" \
+    COGNITO_HOSTED_UI_DOMAIN="$(just _ssm identity/hosted_ui_domain)" \
+        trunk build --release
 
     bucket="$(just _ssm delivery/spa_bucket)"
     distribution="$(just _ssm delivery/cloudfront_distribution_id)"

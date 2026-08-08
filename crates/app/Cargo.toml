@@ -12,3 +12,23 @@ leptos = { workspace = true, features = ["csr"] }
 leptos_router.workspace = true
 console_error_panic_hook.workspace = true
 gloo-net = { workspace = true, features = ["http", "json"] }
+
+# src/auth.rs: the PKCE exchange and the session it keeps.
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+sha2.workspace = true
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+
+# web-sys is feature-gated per browser interface; these are the ones auth.rs
+# touches. `Crypto` and `SubtleCrypto` are separate: the random bytes come from
+# the synchronous `getRandomValues`, so only `Crypto` is needed.
+web-sys = { workspace = true, features = [
+  "Window",
+  "Location",
+  "History",
+  "Storage",
+  "Crypto",
+  "UrlSearchParams",
+] }

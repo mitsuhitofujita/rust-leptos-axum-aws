@@ -43,6 +43,34 @@ a[aria-current="page"] {
   text-decoration-thickness: 2px;
 }
 
+/* The sign-in control. Absent entirely from an unconfigured build, so these
+   rules apply to a deployed page and to `just dev-web-auth`. */
+.auth {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 0.875rem;
+}
+
+.auth-email {
+  opacity: 0.7;
+}
+
+.auth button {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.auth button:hover {
+  border-color: currentColor;
+}
+
 h1 {
   font-size: 1.5rem;
 }
