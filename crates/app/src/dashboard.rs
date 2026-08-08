@@ -6,8 +6,8 @@ use shared::{ActionRecord, RecentSummary};
 use wasm_bindgen::JsValue;
 
 use crate::api::{ApiError, fetch_dashboard};
-use crate::app::{SiteHeader, auth_state};
-use crate::auth::{self, AuthState};
+use crate::app::{SiteHeader, auth_state, note_unauthorized};
+use crate::auth::AuthState;
 use crate::home::ProfileImage;
 use crate::icons::{ActivityGlyph, Plus};
 
@@ -18,28 +18,18 @@ pub fn DashboardPage() -> impl IntoView {
     // `LocalResource` rather than `Resource`: the browser fetch future is not
     // `Send`, and in a CSR build nothing ever runs on the server.
     //
-    // Reading the auth signal in the source closure is load-bearing. Without it
-    // the first fetch after a sign-in leaves before `complete_sign_in` has
-    // stored the token, renders the 401, and never retries — the state settling
-    // is precisely the event that should re-run this.
-    let dashboard = LocalResource::new(move || {
-        let _ = auth_state.get();
-        fetch_dashboard()
-    });
+    // The auth state is settled before this screen exists: `RequireAuth` is what
+    // renders it, and it renders nothing while the state is still `Loading`. So
+    // the token is already stored when this first runs, and the resource has no
+    // reason to watch the signal.
+    let dashboard = LocalResource::new(fetch_dashboard);
 
-    // A 401 means the token this tab holds is not one the API accepts, so it is
-    // dropped and home falls back to offering a sign-in.
-    //
-    // The guard is what keeps this from looping. Only a signed-in state
-    // transitions; a 401 arriving when there was no token to blame writes
-    // nothing, because writing would re-run the resource, fail the same way, and
-    // write again.
+    // A 401 means the token this tab holds is not one the API accepts. Dropping
+    // the session is all that happens here; the guard is what notices and sends
+    // the visitor home.
     Effect::new(move || {
-        if matches!(dashboard.get(), Some(Err(ApiError::Unauthorized)))
-            && matches!(auth_state.get_untracked(), AuthState::SignedIn { .. })
-        {
-            auth::forget_session();
-            auth_state.set(AuthState::SignedOut);
+        if matches!(dashboard.get(), Some(Err(ApiError::Unauthorized))) {
+            note_unauthorized();
         }
     });
 
@@ -75,12 +65,9 @@ pub fn DashboardPage() -> impl IntoView {
                         <RecentActions records=data.recent />
                     }
                     .into_any(),
-                    Err(ApiError::Unauthorized) => view! {
-                        <p class="error-message">
-                            "The API refused this request. Sign in and try again."
-                        </p>
-                    }
-                    .into_any(),
+                    // No arm for `Unauthorized`: the effect above has already
+                    // dropped the session, and the guard is sending the visitor
+                    // to the home screen that offers a fresh sign-in.
                     Err(error) => view! {
                         <p class="error-message">{error.to_string()}</p>
                     }
