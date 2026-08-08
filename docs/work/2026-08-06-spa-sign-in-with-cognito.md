@@ -1,7 +1,8 @@
 # Sign in with Cognito, so the API answers the SPA
 
-Status: in progress
+Status: complete
 Started: 2026-08-06
+Completed: 2026-08-08
 Branch: main
 
 ## Request
@@ -315,10 +316,12 @@ than not having been run — but it has not been run.
 
 ## Retirement
 
-- [ ] Design Documents updated — `frontend.md`, `deployment.md`, `index.md`.
-      Drafted and in the working tree; **awaiting the user's confirmation**,
-      which is what this box waits on: `docs/README.md` makes a human the owner
-      of any design-document overwrite.
+- [x] Design Documents updated — `frontend.md`, `deployment.md`, `index.md`,
+      confirmed by the user and committed in e2d1ba3. `workspace.md` and a
+      second pass over `deployment.md` followed on 2026-08-08: the
+      `dev-web-auth` recipe, the devcontainer's lack of a browser, and the
+      `.wasm` grep that distinguishes a configured build from an unconfigured
+      one.
 - [x] Decision Records written — DR-0010.
 - [x] Non-obvious knowledge preserved. The rejected token-storage shapes and the
       case against an auth library are DR-0010's Alternatives. The

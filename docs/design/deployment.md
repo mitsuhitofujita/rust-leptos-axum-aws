@@ -1,11 +1,12 @@
 # Deployment
 
-Updated: 2026-08-07
+Updated: 2026-08-08
 
-Note: all four layers have been applied, all ten SSM parameters exist, and both
-artefacts have been deployed on top of them. The SPA now signs in and carries an
-access token (DR-0010), but the deployed bundle predates that work: closing the
-gap on the deployed page takes one `just deploy-web`, which has not been run.
+Note: all four layers have been applied and all ten SSM parameters exist. The
+API is deployed and `GET /health` returns `ok`. The bundle on CloudFront was
+built without the two Cognito variables, so it sends no token and
+`GET /api/greeting` is answered 401 there; one `just deploy-web` replaces it
+with a build that signs in.
 
 ## Purpose
 
@@ -236,6 +237,11 @@ supplies the two real values when the flow itself is being worked on.
 Cargo tracks variables reached through `option_env!`, so changing one rebuilds
 the crate rather than silently reusing a bundle built against a different
 endpoint or a different user pool.
+
+An unset variable also leaves nothing behind: a bundle built without the two
+Cognito variables contains no hosted-UI hostname and no `/oauth2/` path at all,
+so a `grep` over `dist/*.wasm` tells a configured build from an unconfigured one
+without running either.
 
 ## Constraints
 

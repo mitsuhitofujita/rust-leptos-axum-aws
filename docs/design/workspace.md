@@ -1,6 +1,6 @@
 # Workspace
 
-Updated: 2026-08-04
+Updated: 2026-08-08
 
 ## Purpose
 
@@ -51,6 +51,7 @@ version-mismatch failures — DR-0003.
 | Recipe | What it does |
 | --- | --- |
 | `dev-web` | `trunk serve` — frontend on :8080, proxying `/api` to :3000 |
+| `dev-web-auth` | the same dev server with sign-in switched on; resolves the two Cognito values from SSM, so it needs AWS credentials |
 | `dev-api` | `cargo run -p server` — API on :3000 |
 | `build` | release build of the workspace and of the WASM bundle |
 | `check` | `cargo check` for the host, plus `app` for WASM |
@@ -75,3 +76,8 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
 - Checking the workspace for the host target is not sufficient. `crates/app`
   must also be checked for `wasm32-unknown-unknown`; `just check` and `just
   lint` do both.
+- The devcontainer has no browser and no Node.js. Anything the SPA does in a
+  DOM — the sign-in redirect, the header control, the headers on a request —
+  can only be checked by running `dev-web` or `dev-web-auth` and opening the
+  forwarded port from outside the container. `check`, `lint` and `build` reach
+  the compilation of that code and nothing further.
