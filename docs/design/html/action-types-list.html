@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Action types — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --top-row-height: 42px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --font-display: 42px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+        --shadow: 0 18px 55px rgba(118, 39, 63, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: #f4edef;
+        scrollbar-gutter: stable;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      .app-shell {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow: hidden;
+        flex-direction: column;
+        background: var(--rose-50);
+        box-shadow: var(--shadow);
+        isolation: isolate;
+      }
+
+      .app-shell::before,
+      .app-shell::after {
+        position: absolute;
+        z-index: -1;
+        width: 220px;
+        height: 220px;
+        border: 1px solid var(--rose-200);
+        border-radius: 50%;
+        content: "";
+        opacity: 0.6;
+      }
+
+      .app-shell::before {
+        top: 110px;
+        right: -160px;
+      }
+
+      .app-shell::after {
+        bottom: 124px;
+        left: -178px;
+      }
+
+      .site-header {
+        display: flex;
+        min-height: var(--top-row-height);
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        text-decoration: none;
+      }
+
+      .wordmark-mark {
+        position: relative;
+        width: var(--space-lg);
+        height: var(--space-lg);
+        border: 2px solid var(--accent);
+        border-radius: 9px;
+        transform: rotate(-7deg);
+      }
+
+      .wordmark-mark::after {
+        position: absolute;
+        right: 5px;
+        bottom: 5px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+      }
+
+      .profile-button {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        overflow: hidden;
+        border: 3px solid var(--white);
+        border-radius: 50%;
+        background: var(--accent-soft);
+        box-shadow: 0 4px 13px rgba(111, 36, 60, 0.14);
+        cursor: pointer;
+        place-items: center;
+        transition:
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .profile-button:hover {
+        box-shadow: 0 7px 18px rgba(111, 36, 60, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .profile-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .profile-image {
+        width: 100%;
+        height: 100%;
+      }
+
+      main {
+        flex: 1;
+        padding: var(--space-lg) var(--client-gutter) var(--space-md);
+      }
+
+      .page-heading {
+        margin-top: var(--space-lg);
+        animation: enter 500ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin: 0 0 var(--space-md);
+        color: var(--accent-dark);
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 18px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        content: "";
+      }
+
+      h1 {
+        max-width: 350px;
+        margin: 0;
+        font-size: var(--font-display);
+        font-weight: 800;
+        letter-spacing: -0.065em;
+        line-height: 0.98;
+      }
+
+      .lead {
+        max-width: 325px;
+        margin: var(--space-md) 0 0;
+        color: var(--muted);
+        font-size: var(--font-body);
+        line-height: 1.625;
+      }
+
+      .add-button {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        margin-top: var(--space-lg);
+        padding: 0 var(--space-md) 0 var(--space-lg);
+        border-radius: var(--space-md);
+        color: var(--white);
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+        font-size: var(--font-body);
+        font-weight: 800;
+        text-decoration: none;
+        animation: enter 580ms 70ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+        transition:
+          background-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .add-button:hover {
+        background: var(--accent-dark);
+        box-shadow: 0 16px 30px rgba(199, 30, 75, 0.28);
+        transform: translateY(-1px);
+      }
+
+      .add-button:active {
+        transform: translateY(1px);
+      }
+
+      .add-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .add-icon {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        color: var(--accent-dark);
+        background: var(--white);
+        place-items: center;
+      }
+
+      .add-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .section-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        margin: var(--space-xl) 0 var(--space-xs);
+      }
+
+      .section-heading h2 {
+        margin: 0;
+        font-size: var(--font-title);
+        letter-spacing: -0.035em;
+      }
+
+      .type-count {
+        color: #9d818a;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .helper {
+        margin: 0 0 var(--space-md);
+        color: var(--muted);
+        font-size: var(--font-small);
+        line-height: 1.5;
+      }
+
+      .type-list {
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: var(--space-lg);
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: 0 10px 28px rgba(93, 40, 57, 0.055);
+        list-style: none;
+        animation: enter 600ms 130ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .type-item + .type-item {
+        border-top: 1px solid var(--line);
+      }
+
+      .type-link {
+        display: flex;
+        min-height: 68px;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        color: inherit;
+        text-decoration: none;
+        transition: background-color 160ms ease;
+      }
+
+      .type-link:hover {
+        background: var(--rose-100);
+      }
+
+      .type-link:focus-visible {
+        position: relative;
+        z-index: 1;
+        outline: 3px solid rgba(231, 53, 98, 0.18);
+        outline-offset: -3px;
+      }
+
+      .type-icon {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        border-radius: var(--space-md);
+        color: var(--accent-dark);
+        background: var(--accent-soft);
+        place-items: center;
+      }
+
+      .type-icon svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .type-copy {
+        display: grid;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .type-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .unit-value {
+        flex: 0 0 auto;
+        color: var(--accent-dark);
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .edit-icon {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        color: var(--accent-dark);
+        background: var(--rose-100);
+        place-items: center;
+        transition: transform 160ms ease;
+      }
+
+      .type-link:hover .edit-icon {
+        transform: translateX(2px);
+      }
+
+      .edit-icon svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .site-footer {
+        margin: var(--space-md) var(--client-gutter) 0;
+        padding: var(--space-md) 0 var(--space-lg);
+        border-top: 1px solid var(--line);
+        color: #a98d96;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-height: 720px) {
+        main {
+          padding-top: var(--space-md);
+        }
+
+        .page-heading {
+          margin-top: var(--space-md);
+        }
+
+        .add-button {
+          margin-top: var(--space-md);
+        }
+
+        .section-heading {
+          margin-top: var(--space-lg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main>
+        <header class="site-header">
+          <a class="wordmark" href="#" aria-label="actord home">
+            <span class="wordmark-mark" aria-hidden="true"></span>
+            <span>actord</span>
+          </a>
+
+          <button class="profile-button" type="button" aria-label="Open Alex's profile">
+            <svg class="profile-image" viewBox="0 0 48 48" role="img" aria-label="Alex's profile image">
+              <rect width="48" height="48" fill="#ffdce5" />
+              <circle cx="24" cy="18" r="9" fill="#c94a69" />
+              <path d="M8 48c1.4-10.1 7.1-15.2 16-15.2S38.6 37.9 40 48" fill="#7d2c45" />
+              <path d="M16 16.8c.7-6.5 4.1-9.7 9.8-9.7 5.4 0 8.4 3.7 8.2 9.4-2.9-1.1-5.6-3.2-7.4-5.3-2.5 3.3-6 5.2-10.6 5.6Z" fill="#512432" />
+            </svg>
+          </button>
+        </header>
+
+        <section class="page-heading" aria-labelledby="page-title">
+          <p class="eyebrow">Your setup</p>
+          <h1 id="page-title">Action types</h1>
+          <p class="lead">
+            Keep the actions you record and their numeric units in one place.
+          </p>
+        </section>
+
+        <a class="add-button" href="#">
+          <span>Add action type</span>
+          <span class="add-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+        </a>
+
+        <section aria-labelledby="types-title">
+          <div class="section-heading">
+            <h2 id="types-title">Your types</h2>
+            <span class="type-count" data-type-count>0 types</span>
+          </div>
+          <p class="helper">Choose a type to edit its name, unit, or icon.</p>
+
+          <ul class="type-list" data-action-types>
+            <li class="type-item">
+              <a class="type-link" href="#">
+                <span class="type-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="5" r="1" /><path d="m9 20 3-6 3 6" /><path d="m6 8 6 2 6-2" /><path d="M12 10v4" />
+                  </svg>
+                </span>
+                <span class="type-copy"><span class="type-name">Running</span></span>
+                <span class="unit-value">km</span>
+                <span class="edit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </a>
+            </li>
+            <li class="type-item">
+              <a class="type-link" href="#">
+                <span class="type-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z" /><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97" /></svg></span>
+                <span class="type-copy"><span class="type-name">Water</span></span>
+                <span class="unit-value">ml</span>
+                <span class="edit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </a>
+            </li>
+            <li class="type-item">
+              <a class="type-link" href="#">
+                <span class="type-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v16" /><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z" /></svg></span>
+                <span class="type-copy"><span class="type-name">Reading</span></span>
+                <span class="unit-value">pages</span>
+                <span class="edit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </a>
+            </li>
+            <li class="type-item">
+              <a class="type-link" href="#">
+                <span class="type-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="14" y1="2" y2="2" /><line x1="12" x2="15" y1="14" y2="11" /><circle cx="12" cy="14" r="8" /></svg></span>
+                <span class="type-copy"><span class="type-name">Meditation</span></span>
+                <span class="unit-value">min</span>
+                <span class="edit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </a>
+            </li>
+            <li class="type-item">
+              <a class="type-link" href="#">
+                <span class="type-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z" /><path d="m2.5 21.5 1.4-1.4" /><path d="m20.1 3.9 1.4-1.4" /><path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z" /><path d="m9.6 14.4 4.8-4.8" /></svg></span>
+                <span class="type-copy"><span class="type-name">Strength training</span></span>
+                <span class="unit-value">reps</span>
+                <span class="edit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </a>
+            </li>
+            <li class="type-item">
+              <a class="type-link" href="#">
+                <span class="type-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" /><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" /><path d="M16 17h4" /><path d="M4 13h4" /></svg></span>
+                <span class="type-copy"><span class="type-name">Walking</span></span>
+                <span class="unit-value">steps</span>
+                <span class="edit-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </a>
+            </li>
+          </ul>
+        </section>
+      </main>
+
+      <footer class="site-footer">actord</footer>
+    </div>
+
+    <script>
+      const actionTypes = Array.from(
+        document.querySelectorAll("[data-action-types] > .type-item"),
+      );
+      const typeTotal = actionTypes.length;
+
+      document.querySelector("[data-type-count]").textContent =
+        `${typeTotal} ${typeTotal === 1 ? "type" : "types"}`;
+    </script>
+  </body>
+</html>

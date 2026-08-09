@@ -1,14 +1,14 @@
 # Page Layouts
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 
 ## Purpose
 
 Define the screen inventory, information hierarchy, and navigation intent of
 actord. The application records a completed action by pairing a previously
-registered action type with a numeric value. An action type supplies the action
-name and the unit used by that value; for example, `Running` and `km` make the
-record `Running — 5.2 km`.
+registered action type with a numeric value. An action type supplies an icon,
+the action name, and the unit used by that value; for example, a running glyph,
+`Running`, and `km` make the record `Running — 5.2 km`.
 
 This document defines layout intent rather than routes or component ownership.
 The shared visual rules are in [Visual Design](visual-design.md).
@@ -102,14 +102,220 @@ ten-day window and visualizes one bar per day. It communicates the total in text
 the bars are supplemental and hidden from assistive technology.
 
 The recent list contains at most the ten latest action records, newest first.
-Each row exposes the action-type icon, action name, recorded timestamp, numeric
-value and unit. The row links to action creation with that action type already
-selected, so recording the same activity again is one direct transition. The
-plus symbol reinforces the transition but is decorative. Long action names
-truncate within the row; values and units do not wrap.
+Each row exposes the action type's configured icon, action name, recorded
+timestamp, numeric value and unit. The row links to action creation with that
+action type already selected, so recording the same activity again is one direct
+transition. The plus symbol reinforces the transition but is decorative. Long
+action names truncate within the row; values and units do not wrap.
 
 The ten-day summary and the ten-record list are separate limits. The list is not
 required to contain exactly one record per chart bar.
+
+### Action types
+
+The action types screen is the authenticated management index:
+
+```text
+actord                          avatar
+
+YOUR SETUP
+Action types
+Supporting explanation
+
+┌          Add action type         ┐
+└──────────────────────────────────┘
+
+Your types                       N types
+Choose a type to edit its name, unit, or icon.
+┌ icon name                 unit  › ┐
+├ icon name                 unit  › ┤
+└ ... registered action types ...  ┘
+```
+
+The full-width solid accent control opens action-type creation. The registered
+types appear on an ordinary content surface and the visible count is derived
+from that collection. Each row shows the configured icon, action name, and unit,
+and the whole row opens that type for editing. The icon is supplemental to the
+visible name and hidden from assistive technology; the chevron is decorative.
+Long names truncate before displacing the unit, which remains visible on one
+line, and the row carries no further supporting copy.
+
+The reference defines the populated state only. Empty, loading, error, and
+pagination behavior remain unspecified. The complete visual reference is
+[`html/action-types-list.html`](html/action-types-list.html).
+
+### Add action type
+
+The add action type screen is an authenticated, single-purpose form:
+
+```text
+actord                          avatar
+
+ACTION TYPES
+Create a
+new type.
+
+┌ Action name ─────────────────────┐
+│ e.g. Running                     │
+│ supporting guidance              │
+│                                  │
+│ Numeric unit                     │
+│ e.g. km                          │
+│ supporting guidance              │
+│                                  │
+│ Icon                             │
+│ ┌───────┐                        │
+│ │ glyph │                        │
+│ └───────┘                        │
+│ supporting guidance              │
+└──────────────────────────────────┘
+
+┌         Create action type       ┐
+└──────────────────────────────────┘
+                Cancel
+```
+
+The fields live together on an ordinary content surface. All three are required:
+the action name is the label shown on records, the numeric unit is displayed
+beside every recorded value, and the icon is the supplemental glyph shown with
+the type. One compact icon-only selector shows the current glyph; its field label
+provides visible context and its accessible name also includes the current
+Lucide name. Activating it opens the searchable modal picker described below.
+The examples `Running` and `km` demonstrate the relationship without supplying
+initial text values.
+The solid accent button is the single primary action; `Cancel` returns to the
+action-type area without saving (DR-0013).
+
+On a short viewport the standard top and section gaps contract. On a taller
+viewport the action group moves toward the bottom of the available shell while
+remaining after the fields in document and keyboard order. The complete visual
+reference is
+[`html/action-types-create.html`](html/action-types-create.html).
+
+### Edit action type
+
+The edit action type screen uses the same field composition as creation, with
+the selected type's current values filled in:
+
+```text
+actord                          avatar
+
+ACTION TYPES
+Edit action
+type.
+
+┌ Action name ─────────────────────┐
+│ Running                          │
+│ supporting guidance              │
+│                                  │
+│ Numeric unit                     │
+│ km                               │
+│ supporting guidance              │
+│                                  │
+│ Icon                             │
+│ ┌───────┐                        │
+│ │ glyph │                        │
+│ └───────┘                        │
+│ supporting guidance              │
+└──────────────────────────────────┘
+
+┌             Save changes         ┐
+└──────────────────────────────────┘
+                Cancel
+
+────────────────────────────────────
+Delete this action type
+Supporting consequence copy
+┌         Delete action type       ┐
+└──────────────────────────────────┘
+```
+
+The compact selector shows only the selected type's current glyph and opens the
+same searchable picker used by creation. Its accessible name includes the
+current Lucide name (DR-0013, DR-0014). Save is the solid accent primary action
+and `Cancel` returns without applying changes. Deletion is
+separated from the routine form by a section gap and divider, explained in text,
+and rendered as an outlined full-width button. Its label and trash glyph
+communicate the operation without relying on color alone.
+
+The edit reference defines placement of the delete trigger. Activating it opens
+the custom confirmation state described below. The effect on existing action
+records, success and error feedback, and post-delete navigation remain
+unspecified. The complete edit-page visual reference is
+[`html/action-types-edit.html`](html/action-types-edit.html).
+
+### Action type icon picker
+
+Create and edit open the same modal selection state from their compact icon
+field:
+
+```text
+╔ dimmed form page ════════════════╗
+║  ACTION TYPE ICON             ×  ║
+║  Choose an icon                  ║
+║                                  ║
+║  Search icons                    ║
+║  ┌ e.g. book open ────────────┐  ║
+║  └────────────────────────────┘  ║
+║  N icons                         ║
+║  ┌ glyph  Person Standing    ✓┐  ║
+║  ├ glyph  Droplets            ┤  ║
+║  ├ glyph  Book Open           ┤  ║
+║  └ ... filtered choices ...   ┘  ║
+║                                  ║
+║  ┌     Use selected icon      ┐  ║
+║  └────────────────────────────┘  ║
+╚══════════════════════════════════╝
+```
+
+The normal search input receives focus on open and filters the supported Lucide
+catalog by each icon's official English name. A live result count and an
+explicit empty state report the filter outcome. Results form a vertically
+scrollable native single-select radio group: each row pairs a glyph with its
+official name and keeps focus visually distinct from the checked state. The
+selection does not change the form until `Use selected icon` is activated. The
+submitted identifier is the corresponding canonical kebab-case Lucide name
+(DR-0014).
+
+The native modal keeps focus inside. The close button or Escape dismisses it
+without applying the staged choice, then returns focus to the compact selector.
+Search uses normal platform text-editing keys and radios retain native arrow-key
+behavior rather than reproducing a custom grid interaction (DR-0013).
+
+### Delete action type confirmation
+
+Deletion confirmation is a modal state over the edit action type page:
+
+```text
+╔ dimmed, blurred edit page ═══════╗
+║                                  ║
+║  ┌────────────────────────────┐  ║
+║  │ trash  CONFIRM DELETION    │  ║
+║  │                            │  ║
+║  │ Delete Running?            │  ║
+║  │ consequence and warning    │  ║
+║  │                            │  ║
+║  │ Running                 km │  ║
+║  │                            │  ║
+║  │      Keep action type      │  ║
+║  │     Delete action type     │  ║
+║  └────────────────────────────┘  ║
+║                                  ║
+╚══════════════════════════════════╝
+```
+
+The underlying edit page is inert while the dialog is open. The white dialog
+identifies the selected action type by name and unit, explains that it will no
+longer be available for new records, and states that deletion cannot be undone.
+`Keep action type` is first in document order and receives initial focus. The
+confirmed deletion action uses solid ink rather than the product accent; text
+and a trash glyph convey its destructive meaning without relying on color.
+
+The reference defines the confirmation choice but not the effect on historical
+records, success and error feedback, post-delete navigation, dismissal through
+Escape or the dimmed layer, or focus restoration. The complete visual reference
+is
+[`html/action-types-delete-confirm.html`](html/action-types-delete-confirm.html).
 
 ### Remaining application screens
 
@@ -118,9 +324,6 @@ visual composition has not yet been defined by an HTML reference:
 
 | Screen | Required content and behavior |
 | --- | --- |
-| Action types | List the registered action types and provide access to add and edit operations. |
-| Add action type | Accept an English action name and the unit for its numeric value. |
-| Edit action type | Edit the name and unit of an existing action type and offer deletion. |
 | Actions | List recorded actions. |
 | Add action | Select an action type and enter its numeric value; when opened from a dashboard row, preserve the preselected type. |
 
@@ -137,7 +340,7 @@ The page layouts consume three categories of data:
 | Data | Used by |
 | --- | --- |
 | Authentication state, display name, email, profile image | Both home states and the authenticated top row |
-| Action type: name and numeric unit | Action-type management, action creation, dashboard rows |
+| Action type: icon identifier, name and numeric unit | Action-type management, action creation, dashboard rows |
 | Action record: action type, numeric value, recorded timestamp | Dashboard summary, dashboard recent list, actions list |
 
 Navigation that is part of the current design is:
@@ -147,6 +350,13 @@ signed-out home ── Google sign-in ──▶ signed-in home
 signed-in home ── Open dashboard ──▶ dashboard
 dashboard recent row ──────────────▶ add action (type preselected)
 authenticated avatar ──────────────▶ action-type access
+action types ───────── Add action type ──▶ add action type
+action-type row ────────────────────────▶ edit action type
+add or edit action type ── icon field ──▶ icon picker
+icon picker ────── Use selected icon ───▶ the form, icon applied
+icon picker ────── close or Escape ─────▶ the form, icon unchanged
+edit action type ───── Delete action type ──▶ deletion confirmation
+deletion confirmation ── Keep action type ──▶ edit action type
 any application screen, unauthenticated ─▶ signed-out home
 ```
 
@@ -162,8 +372,11 @@ that future routes and components must realize.
 
 ## Constraints
 
-- Action types are created before their actions and define both the displayed
-  name and numeric unit.
+- Action types are created before their actions and define the displayed icon,
+  name, and numeric unit. The icon is one canonical Lucide name chosen from the
+  supported catalog, never free text or an uploaded asset — DR-0012, DR-0014.
+- The icon is chosen through the modal picker rather than an inline grid, so the
+  form's height does not grow with the catalog — DR-0013.
 - Recording an action always requires an action type and a numeric value.
 - Dashboard recent actions are capped at ten and ordered newest first.
 - A dashboard recent-action row repeats its type by opening action creation with

@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Confirm action type deletion — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        min-height: 100%;
+        background: #f4edef;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .page-preview {
+        position: fixed;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
+      .dialog-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow-y: auto;
+        padding: var(--space-lg) var(--client-gutter);
+        background: rgba(41, 21, 28, 0.46);
+        backdrop-filter: blur(var(--space-2xs));
+        place-items: center;
+        -webkit-backdrop-filter: blur(var(--space-2xs));
+        animation: veil-in 180ms ease both;
+      }
+
+      .confirm-dialog {
+        position: relative;
+        inset: auto;
+        display: block;
+        width: 100%;
+        max-width: calc(var(--app-width) - (2 * var(--client-gutter)));
+        margin: 0;
+        padding: var(--space-lg);
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: var(--space-lg);
+        color: var(--ink);
+        background: var(--white);
+        box-shadow: 0 26px 70px rgba(41, 21, 28, 0.28);
+        animation: dialog-in 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .dialog-label {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin: 0 0 var(--space-md);
+        color: var(--accent-dark);
+        font-size: var(--font-caption);
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .dialog-icon {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: var(--accent-soft);
+        place-items: center;
+      }
+
+      .dialog-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .confirm-dialog h1 {
+        margin: 0;
+        font-size: var(--font-title);
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        line-height: 1.08;
+      }
+
+      .dialog-copy {
+        margin: var(--space-md) 0 0;
+        color: var(--muted);
+        font-size: var(--font-body);
+        line-height: 1.625;
+      }
+
+      .type-summary {
+        display: flex;
+        min-height: 56px;
+        align-items: center;
+        gap: var(--space-sm);
+        margin-top: var(--space-md);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--line);
+        border-radius: var(--space-md);
+        background: var(--rose-50);
+      }
+
+      .type-copy {
+        display: grid;
+        min-width: 0;
+        gap: var(--space-2xs);
+      }
+
+      .type-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .type-kind {
+        color: #9a7f88;
+        font-size: var(--font-caption);
+        font-weight: 600;
+      }
+
+      .type-unit {
+        margin-left: auto;
+        flex: 0 0 auto;
+        color: var(--accent-dark);
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .dialog-actions {
+        display: grid;
+        gap: var(--space-sm);
+        margin-top: var(--space-lg);
+      }
+
+      .dialog-button {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-sm);
+        padding: 0 var(--space-md);
+        border-radius: var(--space-md);
+        font-size: var(--font-body);
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          background-color 180ms ease,
+          border-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .keep-button {
+        border: 1px solid #e6d6db;
+        color: var(--ink);
+        background: var(--white);
+        box-shadow: 0 7px 18px rgba(93, 40, 57, 0.07);
+      }
+
+      .keep-button:hover {
+        border-color: #d5aab6;
+        background: var(--rose-100);
+        transform: translateY(-1px);
+      }
+
+      .delete-button {
+        border: 0;
+        color: var(--white);
+        background: var(--ink);
+        box-shadow: 0 12px 26px rgba(41, 21, 28, 0.2);
+      }
+
+      .delete-button:hover {
+        box-shadow: 0 16px 30px rgba(41, 21, 28, 0.27);
+        transform: translateY(-1px);
+      }
+
+      .dialog-button:active {
+        transform: translateY(1px);
+      }
+
+      .dialog-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.28);
+        outline-offset: 3px;
+      }
+
+      .delete-button svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      @keyframes veil-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes dialog-in {
+        from {
+          opacity: 0;
+          transform: translateY(var(--space-sm)) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @media (max-height: 720px) {
+        .dialog-layer {
+          padding-top: var(--space-md);
+          padding-bottom: var(--space-md);
+        }
+
+        .confirm-dialog {
+          padding: var(--space-md);
+        }
+
+        .dialog-actions {
+          margin-top: var(--space-md);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      class="page-preview"
+      src="action-types-edit.html"
+      title="Edit action type page"
+      tabindex="-1"
+      aria-hidden="true"
+      inert
+    ></iframe>
+
+    <div class="dialog-layer">
+      <dialog
+        class="confirm-dialog"
+        open
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-description"
+      >
+        <p class="dialog-label">
+          <span class="dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+            </svg>
+          </span>
+          <span>Confirm deletion</span>
+        </p>
+
+        <h1 id="confirm-title">Delete Running?</h1>
+        <p class="dialog-copy" id="confirm-description">
+          This action type will no longer be available for new records. This
+          cannot be undone.
+        </p>
+
+        <div class="type-summary" aria-label="Action type to delete">
+          <span class="type-copy">
+            <span class="type-name">Running</span>
+            <span class="type-kind">Action type</span>
+          </span>
+          <span class="type-unit">km</span>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="dialog-button keep-button" type="button" autofocus>
+            Keep action type
+          </button>
+          <button class="dialog-button delete-button" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+            </svg>
+            <span>Delete action type</span>
+          </button>
+        </div>
+      </dialog>
+    </div>
+  </body>
+</html>

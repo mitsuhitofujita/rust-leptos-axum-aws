@@ -1,6 +1,6 @@
 # Visual Design
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 
 ## Purpose
 
@@ -39,10 +39,10 @@ subordinate to content.
 
 ### Spacing
 
-The spacing scale is `4`, `6`, `10`, `16`, `26`, and `42` pixels. From 6 pixels
-upward, each step approximates a golden-ratio progression and is also the sum
-of the two preceding steps. Use the named scale rather than introducing nearby
-one-off values.
+The spacing scale is `4`, `6`, `10`, `16`, `26`, `42`, and `68` pixels. From 6
+pixels upward, each step approximates a golden-ratio progression and is also the
+sum of the two preceding steps. Use the named scale rather than introducing
+nearby one-off values.
 
 | Token | Value | Typical use |
 | --- | --- | --- |
@@ -52,6 +52,12 @@ one-off values.
 | `space-md` | `16px` | Default block gap, control radius, row padding |
 | `space-lg` | `26px` | Page gutter, section gap, prominent radius |
 | `space-xl` | `42px` | Major section separation and square icon container |
+| `space-2xl` | `68px` | Record and action-type row height, icon selector |
+
+One height sits outside the spacing scale: interactive controls that span the
+column — buttons, text inputs, the picker's search field and its result rows —
+are at least `56px` tall, which is a touch-target minimum rather than a spacing
+step.
 
 ### Color
 
@@ -108,6 +114,16 @@ content groups use a translucent white surface with a pale border and subtler
 shadow. Avatars are circular; activity glyphs sit in 42-pixel rounded-square
 containers. Icons support visible labels and do not replace them.
 
+Action-type creation and editing show one compact, outlined 68-pixel icon-only
+field beneath the visible `Icon` label. The current Lucide name is visually
+hidden but remains part of the control's accessible name. The field opens a
+centered white modal over a dimmed, lightly blurred shell. The modal combines a
+normal search input with vertically scrollable 56-pixel result rows; every row
+pairs a 42-pixel glyph container with the official Lucide icon name and a
+separate checked indicator. The final `Use selected icon` action uses the accent
+surface. This composition keeps the form stable as the supported Lucide catalog
+grows (DR-0013, DR-0014).
+
 The footer closes every page with a separator and a centered uppercase `actord`
 label. It shares the page's 26-pixel horizontal alignment.
 
@@ -129,10 +145,16 @@ reduced to effectively instantaneous durations.
 This document supplies the tokens and visual rules used by
 [Page Layouts](page-layouts.md) and by the CSS in `style/main.css`.
 
-The three HTML references under [`html/`](html/) show the intended application
-of these rules to signed-out home, signed-in home, and dashboard states. They
-are design references, not runtime entry points; the shipped SPA remains rooted
-at the repository's `index.html` as described in [Frontend](frontend.md).
+The seven HTML references under [`html/`](html/) show the intended application
+of these rules to signed-out home, signed-in home, dashboard, action types list,
+create action type, edit action type, and delete action type confirmation
+states. They are design references, not runtime entry points; the shipped SPA
+remains rooted at the repository's `index.html` as described in
+[Frontend](frontend.md).
+
+Activity and action-type glyphs are Lucide geometry (DR-0014). Its license
+notice lives in `THIRD_PARTY_NOTICES.md` at the repository root and travels with
+anything that embeds those paths, design references included.
 
 ## Constraints
 

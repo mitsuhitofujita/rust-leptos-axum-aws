@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -55,3 +55,6 @@ Not yet written, because it does not exist yet:
 | [DR-0009](../decisions/DR-0009-cors-is-answered-by-the-http-api.md) | CORS is answered by the HTTP API, so `/api` routes are declared per method |
 | [DR-0010](../decisions/DR-0010-the-spa-signs-in-through-the-hosted-ui-by-hand.md) | The SPA signs in through the hosted UI, with a PKCE flow written by hand |
 | [DR-0011](../decisions/DR-0011-authenticated-screens-are-guarded-in-the-router.md) | Authenticated screens are guarded in the router, as experience rather than enforcement |
+| [DR-0012](../decisions/DR-0012-action-types-choose-icons-from-a-built-in-set.md) | Action types choose one icon from an application-owned built-in set — superseded by DR-0014 |
+| [DR-0013](../decisions/DR-0013-action-type-icons-use-a-searchable-modal-picker.md) | Action type icons are selected through a searchable modal picker |
+| [DR-0014](../decisions/DR-0014-action-type-icons-use-lucide-names-and-svgs.md) | Action type icons use Lucide canonical names and locally rendered SVGs |
