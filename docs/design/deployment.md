@@ -1,12 +1,16 @@
 # Deployment
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 
-Note: all four layers have been applied and all ten SSM parameters exist. The
-API is deployed and `GET /health` returns `ok`. The bundle on CloudFront was
-built without the two Cognito variables, so it sends no token and
-`GET /api/greeting` is answered 401 there; one `just deploy-web` replaces it
-with a build that signs in.
+Note: `bootstrap`, `delivery`, `identity` and `api` have been applied and their
+ten SSM parameters exist. The API is deployed and `GET /health` returns `ok`.
+The bundle on CloudFront was built without the two Cognito variables, so it
+sends no token and `/api` calls are answered 401 there; one `just deploy-web`
+replaces it with a build that signs in.
+
+The `data` layer is configuration only: it has never been applied, its two
+parameters do not exist yet, and `api` now reads them — so `api` cannot be
+planned until `data` has been applied once.
 
 ## Purpose
 
@@ -29,12 +33,13 @@ the API is a separate service, and the two are released independently.
 | --- | --- |
 | The Leptos SPA (`dist/`) | A private S3 bucket, served through CloudFront with Origin Access Control |
 | Authentication | A Cognito User Pool with Google as an identity provider, Authorization Code Flow with PKCE |
+| Application data | One on-demand DynamoDB table, keyed by owner — see [persistence.md](persistence.md) |
 | The axum API (`crates/server`) | AWS Lambda on `provided.al2023`, fronted by the AWS Lambda Web Adapter |
 | API exposure | An API Gateway HTTP API with a JWT authorizer validating Cognito access tokens |
 
 ### The configuration
 
-Terraform (DR-0004), split into four root modules, each with its own state file
+Terraform (DR-0004), split into five root modules, each with its own state file
 in the bootstrap bucket and its own apply (DR-0005):
 
 ```text
@@ -46,6 +51,7 @@ infra/
                              SPA fallback
   identity/                  Cognito User Pool, Google IdP, hosted-UI domain,
                              app client
+  data/                      the DynamoDB table — DR-0015
   api/                       Lambda, HTTP API, JWT authorizer, CORS, IAM role,
                              log groups
     placeholder/bootstrap    stand-in package for the first apply only
@@ -66,20 +72,25 @@ Dependencies run one way:
 ```text
 bootstrap
    │
-   ▼
+   ├── data ── table_name, table_arn ─────────────────────────────────▶
+   ▼                                                                  │
 delivery ── cloudfront_domain ──▶ identity ── issuer, client_id ──▶ api
    └──────── cloudfront_domain (CORS allowed origin) ─────────────────▶
 ```
 
-So a first create is `bootstrap`, `delivery`, `identity`, `api`, applied in that
-order, and a teardown is the reverse. `delivery` sits above nothing but
+So a first create is `bootstrap`, `delivery`, `identity`, `data`, `api`, applied
+in that order, and a teardown is the reverse. `delivery` sits above nothing but
 `bootstrap` because the SPA is static — it learns the API URL and the Cognito
-client id at build time, not through Terraform.
+client id at build time, not through Terraform. `data` sits above nothing but
+`bootstrap` either, since a table needs no value from any other layer; its place
+fourth in the sequence is convention, and the only ordering that is real is that
+it precedes `api`.
 
 `bootstrap` is applied once against a local backend, then its own state is
 migrated into the bucket it created. The bucket has versioning, encryption, a
 public-access block, and `prevent_destroy`. State is locked by S3's native lock
-file, not a DynamoDB table (DR-0006).
+file, not a DynamoDB table (DR-0006) — the table the `data` layer owns is
+application data and has no part in state locking.
 
 Each layer's `backend "s3"` block declares only its `key`. The bucket name is
 not in the repository, because it carries the AWS account id, so the remaining
@@ -96,10 +107,11 @@ terraform -chdir=infra/bootstrap init -migrate-state -backend-config=../backend.
 
 just tf-init delivery && just tf-apply delivery
 just tf-init identity && just tf-apply identity   # needs the Google credentials
+just tf-init data     && just tf-apply data
 just tf-init api      && just tf-apply api
 ```
 
-`just tf-validate` schema-checks all four layers without credentials or a
+`just tf-validate` schema-checks all five layers without credentials or a
 backend, which is as far as anything can be verified before an apply.
 
 ## Interfaces
@@ -120,6 +132,8 @@ what it needs with the `aws_ssm_parameter` data source.
 | `/<project>/identity/user_pool_issuer` | `identity` | `api`, for the JWT authorizer |
 | `/<project>/identity/app_client_id` | `identity` | `api`, as the authorizer's audience; the SPA build, as `COGNITO_CLIENT_ID` |
 | `/<project>/identity/hosted_ui_domain` | `identity` | the SPA build, as `COGNITO_HOSTED_UI_DOMAIN` |
+| `/<project>/data/table_name` | `data` | `api`, as the Lambda's `TABLE_NAME` |
+| `/<project>/data/table_arn` | `data` | `api`, to scope the Lambda's IAM policy |
 | `/<project>/api/api_endpoint` | `api` | `just deploy-web`, as `API_BASE_URL` |
 | `/<project>/api/lambda_function_name` | `api` | `just deploy-api` |
 
@@ -147,6 +161,9 @@ Lambda Web Adapter turns the Lambda invocation into an HTTP request against it:
   entry point and the packaged binary the process it proxies to.
 - Set `AWS_LWA_PORT=3000`, matching the address `crates/server` binds.
 - Set `AWS_LWA_READINESS_CHECK_PATH=/health`, which the service already serves.
+- Set `TABLE_NAME` from the `data` layer's parameter, so the table name reaches
+  the service without being written down twice. `crates/server` does not read it
+  yet.
 
 The two `bootstrap` names are unrelated: one is the `provided.al2023` handler
 convention for the packaged binary, the other is the adapter's own executable in
@@ -390,10 +407,16 @@ without running either.
   needs and Terraform does not manage — so it is derived from the domain prefix
   above and has to be re-entered by hand whenever that prefix moves.
 
-- **Nothing enforces the apply order between layers.** Terraform sees four
+- **Nothing enforces the apply order between layers.** Terraform sees five
   unrelated root modules. The order in Structure above is maintained by this
   document, and repeated as a comment above the `tf-` recipes in the
   `justfile`.
+
+- **The DynamoDB table is guarded as heavily as the user pool.** DR-0005 rated
+  the pool's loss as the only irreversible one in the stack; the table now joins
+  it, so it carries `prevent_destroy`, `deletion_protection_enabled`, and
+  point-in-time recovery for the application-level mistake neither guard sees.
+  What it stores, and how, is [persistence.md](persistence.md).
 
 - **Everything lives in one region.** No cross-region resource exists today. A
   custom domain would introduce one, since CloudFront requires its ACM

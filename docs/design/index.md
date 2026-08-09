@@ -14,7 +14,7 @@ compiled to WebAssembly and delivered as static files, talking to a separate
 axum HTTP API. Both are Rust crates in one Cargo workspace, sharing the types
 that cross the boundary. It deploys to AWS: the bundle to S3 behind CloudFront,
 the API to Lambda behind an API Gateway HTTP API, with Cognito holding the
-identities.
+identities and one DynamoDB table holding the data.
 
 ## Documents
 
@@ -24,6 +24,7 @@ identities.
 | [frontend.md](frontend.md) | The Leptos SPA: routing, data fetching, build, assets |
 | [visual-design.md](visual-design.md) | Mobile shell, design tokens, typography, surfaces, motion, accessibility |
 | [page-layouts.md](page-layouts.md) | Screen inventory, information hierarchy, and navigation intent |
+| [persistence.md](persistence.md) | The DynamoDB table: key encoding, item attributes, the query behind each screen |
 | [deployment.md](deployment.md) | AWS runtime, the Terraform layering, artefact deployment |
 
 Not yet written, because it does not exist yet:
@@ -58,3 +59,5 @@ Not yet written, because it does not exist yet:
 | [DR-0012](../decisions/DR-0012-action-types-choose-icons-from-a-built-in-set.md) | Action types choose one icon from an application-owned built-in set — superseded by DR-0014 |
 | [DR-0013](../decisions/DR-0013-action-type-icons-use-a-searchable-modal-picker.md) | Action type icons are selected through a searchable modal picker |
 | [DR-0014](../decisions/DR-0014-action-type-icons-use-lucide-names-and-svgs.md) | Action type icons use Lucide canonical names and locally rendered SVGs |
+| [DR-0015](../decisions/DR-0015-one-dynamodb-table-keyed-by-owner-and-entity-kind.md) | One DynamoDB table holds every entity, keyed by owner and entity kind |
+| [DR-0016](../decisions/DR-0016-records-copy-their-action-types-display-attributes.md) | An action record copies its action type's display attributes |
