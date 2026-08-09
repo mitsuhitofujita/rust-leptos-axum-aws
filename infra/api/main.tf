@@ -13,10 +13,20 @@ data "aws_ssm_parameter" "app_client_id" {
   name = "/${var.project}/identity/app_client_id"
 }
 
+data "aws_ssm_parameter" "table_name" {
+  name = "/${var.project}/data/table_name"
+}
+
+data "aws_ssm_parameter" "table_arn" {
+  name = "/${var.project}/data/table_arn"
+}
+
 locals {
   name = "${var.project}-api"
 
   cloudfront_url   = "https://${nonsensitive(data.aws_ssm_parameter.cloudfront_domain.value)}"
   user_pool_issuer = nonsensitive(data.aws_ssm_parameter.user_pool_issuer.value)
   app_client_id    = nonsensitive(data.aws_ssm_parameter.app_client_id.value)
+  table_name       = nonsensitive(data.aws_ssm_parameter.table_name.value)
+  table_arn        = nonsensitive(data.aws_ssm_parameter.table_arn.value)
 }

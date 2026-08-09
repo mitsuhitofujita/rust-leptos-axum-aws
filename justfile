@@ -57,18 +57,18 @@ clean:
 
 # --- Infrastructure -------------------------------------------------------
 #
-# Four independent root modules, one state file each (DR-0005). Terraform sees
+# Five independent root modules, one state file each (DR-0005). Terraform sees
 # no relationship between them, so the order is maintained here and in
 # docs/design/deployment.md and nowhere else:
 #
-#   create:  bootstrap -> delivery -> identity -> api
-#   destroy: api -> identity -> delivery -> bootstrap
+#   create:  bootstrap -> delivery -> identity -> data -> api
+#   destroy: api -> data -> identity -> delivery -> bootstrap
 #
 # bootstrap is the exception to tf-init: its first init is local, because it is
 # what creates the bucket the others store state in. See
 # infra/bootstrap/backend.tf.example.
 
-# Point a layer at the remote state bucket. LAYER is delivery, identity or api.
+# Point a layer at the remote state bucket. LAYER is delivery, identity, data or api.
 tf-init LAYER:
     terraform -chdir=infra/{{LAYER}} init -backend-config=../backend.hcl
 
@@ -83,7 +83,7 @@ tf-fmt-check:
 tf-validate:
     #!/usr/bin/env bash
     set -euo pipefail
-    for layer in bootstrap delivery identity api; do
+    for layer in bootstrap delivery identity data api; do
         echo "== ${layer}"
         terraform -chdir="infra/${layer}" init -backend=false -input=false >/dev/null
         terraform -chdir="infra/${layer}" validate

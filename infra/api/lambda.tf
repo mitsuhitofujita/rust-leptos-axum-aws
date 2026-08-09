@@ -44,6 +44,10 @@ resource "aws_lambda_function" "api" {
       AWS_LWA_PORT = "3000"
       # The endpoint crates/server already serves.
       AWS_LWA_READINESS_CHECK_PATH = "/health"
+      # The table the service reads and writes. Passed rather than derived, so
+      # the name lives in one place — the data layer — and travels through SSM
+      # like every other cross-layer value. crates/server does not read it yet.
+      TABLE_NAME = local.table_name
     }
   }
 
@@ -56,6 +60,7 @@ resource "aws_lambda_function" "api" {
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic,
+    aws_iam_role_policy.lambda_table,
     aws_cloudwatch_log_group.lambda,
   ]
 }
