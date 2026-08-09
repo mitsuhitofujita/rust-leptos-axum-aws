@@ -2,15 +2,13 @@
 
 Updated: 2026-08-09
 
-Note: `bootstrap`, `delivery`, `identity` and `api` have been applied and their
-ten SSM parameters exist. The API is deployed and `GET /health` returns `ok`.
-The bundle on CloudFront was built without the two Cognito variables, so it
-sends no token and `/api` calls are answered 401 there; one `just deploy-web`
-replaces it with a build that signs in.
-
-The `data` layer is configuration only: it has never been applied, its two
-parameters do not exist yet, and `api` now reads them — so `api` cannot be
-planned until `data` has been applied once.
+Note: all five layers have been applied and their twelve SSM parameters exist.
+The API is deployed and `GET /health` returns `ok`. The table is empty and
+nothing reads or writes it yet — `crates/server` still answers
+`GET /api/dashboard` from hardcoded values. The bundle on CloudFront was built
+without the two Cognito variables, so it sends no token and `/api` calls are
+answered 401 there; one `just deploy-web` replaces it with a build that signs
+in.
 
 ## Purpose
 

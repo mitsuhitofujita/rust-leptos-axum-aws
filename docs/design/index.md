@@ -31,14 +31,15 @@ Not yet written, because it does not exist yet:
 
 - **backend** — the axum service in `crates/server` holds no domain logic. Its
   whole surface is two endpoints that exist to give the frontend something real
-  to call: `GET /health`, returning `ok`, and `GET /api/greeting`, returning a
-  `shared::Greeting` as JSON. It binds `127.0.0.1:3000` and configures no CORS,
-  for the reason given in DR-0001. A document belongs here once the service
-  does something.
+  to call: `GET /health`, returning `ok`, and `GET /api/dashboard`, returning a
+  `shared::Dashboard` as JSON, assembled from hardcoded values rather than from
+  the table [persistence.md](persistence.md) describes. It binds
+  `127.0.0.1:3000` and configures no CORS, for the reason given in DR-0001. A
+  document belongs here once the service does something.
 - **ci** — the pipeline that runs the Terraform applies and pushes the
   artefacts. Both halves exist as commands a person runs: `infra/` holds the
   configuration, and `just deploy-web` / `just deploy-api` push the artefacts.
-  All four layers have been applied and both artefacts deployed, by hand.
+  All five layers have been applied and both artefacts deployed, by hand.
   Nothing automates any of it, and a document belongs here once something does.
 
 ## Decision Records

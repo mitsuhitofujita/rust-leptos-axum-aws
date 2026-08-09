@@ -1,6 +1,6 @@
 # DynamoDB persistence: infrastructure and schema
 
-Status: in progress
+Status: complete
 Started: 2026-08-09
 Branch: main
 
@@ -176,32 +176,81 @@ decide on.
 (`login session has expired, please reauthenticate`), so neither `data` nor `api`
 can be applied. Nothing else in the plan depends on it.
 
+### 2026-08-09, later
+
+The session was restored with `aws login` and step 8 ran. Both applies matched
+what the plan above expected, with no surprise in either.
+
+`data` planned three creates and applied them: the table in 10 seconds, then
+both parameters. `api` planned one create and one in-place update — the inline
+role policy, and `TABLE_NAME` joining the function's environment — and nothing
+about the HTTP API, the authorizer or the function's code moved, which was the
+one risk worth watching, since `just deploy-api` pushes that code outside
+Terraform.
+
+Two things the earlier entries got wrong, both now corrected:
+
+The Verification section below claimed `just tf-validate` could not run end to
+end because `bootstrap` and `api` carry `.terraform` directories from a real
+backend `init`. That was the wrong diagnosis. `init -backend=false` does resolve
+the stored backend in an initialised directory, but resolving it is not the
+failure — the expired credentials were. With the session restored the recipe
+runs clean over all five layers in place, with no copy and no directory removed.
+
+`deployment.md` said `api` "cannot be planned until `data` has been applied
+once". True at the time and now spent, so the paragraph is gone rather than
+reworded; the note it sat under now says all five layers are applied and their
+twelve parameters exist.
+
+One detail the plan did not name: `describe-table` reports no `SSEDescription`
+at all. That is the AWS-owned default key, which the table was left on
+deliberately, and it is what an unset field means here — not encryption missing.
+A reader checking the table by hand would otherwise read `null` as a defect.
+
+The `index.md` staleness the previous entry left for the user to decide on was
+confirmed and fixed in the same pass: the backend entry described
+`GET /api/greeting` returning a `shared::Greeting`, which `crates/server`
+replaced with `GET /api/dashboard` returning a `shared::Dashboard`, and the ci
+entry counted four applied layers where there are now five.
+
 ## Verification
 
 - `just tf-fmt-check` passes over the whole `infra` tree.
-- `terraform validate` passes for `infra/data` and for `infra/api`.
+- `just tf-validate` passes over all five layers, in place. The earlier claim
+  that it could not run end to end is retracted above: the cause was the expired
+  session, not the leftover `.terraform` directories.
 
-`just tf-validate` itself could not run end to end: `bootstrap` and `api` have
-`.terraform` directories left over from a real `init` against the S3 backend, and
-`init -backend=false` in an already-initialised directory still resolves the
-stored backend, which needs the expired credentials. `data` validated in place;
-`api` was validated from a copy with `.terraform` and `backend.tf` removed. This
-is a property of the working tree, not of the configuration — the recipe runs
-clean on a fresh clone.
+Applied and then checked against the account rather than against state:
 
-Not verified, and unverifiable until credentials are restored: that the table
-applies, that its two parameters appear, and that `api` re-applies against them.
+- `describe-table` — `ACTIVE`, `PAY_PER_REQUEST`, `pk` HASH and `sk` RANGE both
+  `S`, no global or local secondary index, `DeletionProtectionEnabled` true.
+- `describe-continuous-backups` — point-in-time recovery `ENABLED`, 35 days.
+- `just _ssm data/table_name` and `just _ssm data/table_arn` both resolve, and
+  the project now publishes twelve parameters in total.
+- The function's environment carries `TABLE_NAME=rust-leptos-axum-aws-app`.
+- `get-role-policy` on the inline policy — the table ARN alone as the resource,
+  eight item actions, no `Scan`.
+- `GET /health` on the API endpoint still answers 200 `ok`, so the function
+  starts after the environment change.
+- `just tf-plan data` and `just tf-plan api` both report no differences, so
+  configuration and account agree.
+
+Not verified, because nothing exercises it yet: that the key encoding serves the
+three screens. The table is empty and no code reads or writes it.
 
 ## Still to do
 
-- Apply `data`, then re-apply `api`.
 - The data path itself: an AWS SDK dependency in `crates/server`, the Cognito
   `sub` extracted from the validated token, and the endpoints the action-type
   screens need. None of it is part of this unit of work.
 
 ## Retirement
 
-- [ ] Design Documents updated
-- [ ] Decision Records written (DR-____)
-- [ ] Non-obvious knowledge preserved — rejected alternatives, pitfalls, constraints
-- [ ] No durable document depends on this log
+- [x] Design Documents updated — `persistence.md` written, `deployment.md` and
+      `index.md` corrected to say the table exists
+- [x] Decision Records written (DR-0015, DR-0016)
+- [x] Non-obvious knowledge preserved — the rejected table-per-entity and
+      speculative-index designs and the fixed-width `recorded_at` requirement in
+      DR-0015, the denormalisation trade-off in DR-0016, and the constraints
+      neither IAM nor the table can enforce in `persistence.md`
+- [x] No durable document depends on this log

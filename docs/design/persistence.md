@@ -2,7 +2,7 @@
 
 Updated: 2026-08-09
 
-Note: the table exists as configuration and nothing reads or writes it yet.
+Note: the table exists and is empty. Nothing reads or writes it yet —
 `crates/server` still answers `GET /api/dashboard` from hardcoded values, the
 service holds no AWS SDK dependency, and the Cognito `sub` that this schema keys
 on is not yet extracted from the token. This document describes the store the
