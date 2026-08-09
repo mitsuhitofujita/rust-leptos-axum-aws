@@ -29,6 +29,11 @@ secondary index.
 Only the two key attributes are declared to DynamoDB. Every other attribute
 belongs to the application, so adding one is not an infrastructure change.
 
+Encryption at rest is DynamoDB's AWS-owned default, so `infra/data/main.tf`
+carries no `server_side_encryption` block. `describe-table` reports that state by
+omitting `SSEDescription` altogether: its absence means the default key, not the
+absence of encryption.
+
 ### Key encoding
 
 ```text
