@@ -1,6 +1,6 @@
 # Page Layouts
 
-Updated: 2026-08-09
+Updated: 2026-08-10
 
 ## Purpose
 
@@ -140,8 +140,15 @@ visible name and hidden from assistive technology; the chevron is decorative.
 Long names truncate before displacing the unit, which remains visible on one
 line, and the row carries no further supporting copy.
 
-The reference defines the populated state only. Empty, loading, error, and
-pagination behavior remain unspecified. The complete visual reference is
+The screen has an empty state, because every account begins in one. It replaces
+the list with a single line of copy on a dashed outline of the same shape, so
+the screen does not change composition when the first type lands on it; the
+`Add action type` control above is already the way out, so the copy says what is
+missing and offers nothing further. The section heading and its count stay,
+reading `0 types`.
+
+The reference defines the populated state only. Loading, error, and pagination
+behavior remain unspecified. The complete visual reference is
 [`html/action-types-list.html`](html/action-types-list.html).
 
 ### Add action type
@@ -184,7 +191,10 @@ Lucide name. Activating it opens the searchable modal picker described below.
 The examples `Running` and `km` demonstrate the relationship without supplying
 initial text values.
 The solid accent button is the single primary action; `Cancel` returns to the
-action-type area without saving (DR-0013).
+action types screen without saving (DR-0013). A successful creation returns
+there too, so the new type is seen in the list it joined rather than announced
+on the form that made it. A refused one keeps the visitor on the form and states
+the reason above the primary action, in the words the service used.
 
 On a short viewport the standard top and section gaps contract. On a taller
 viewport the action group moves toward the bottom of the available shell while
@@ -351,6 +361,7 @@ signed-in home ── Open dashboard ──▶ dashboard
 dashboard recent row ──────────────▶ add action (type preselected)
 authenticated avatar ──────────────▶ action-type access
 action types ───────── Add action type ──▶ add action type
+add action type ───── Cancel or created ─▶ action types
 action-type row ────────────────────────▶ edit action type
 add or edit action type ── icon field ──▶ icon picker
 icon picker ────── Use selected icon ───▶ the form, icon applied

@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-09
+Updated: 2026-08-10
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -22,6 +22,7 @@ identities and one DynamoDB table holding the data.
 | --- | --- |
 | [workspace.md](workspace.md) | Crate layout, dependency management, toolchain, task runner |
 | [frontend.md](frontend.md) | The Leptos SPA: routing, data fetching, build, assets |
+| [backend.md](backend.md) | The axum service: endpoints, caller identity, the store it chooses |
 | [visual-design.md](visual-design.md) | Mobile shell, design tokens, typography, surfaces, motion, accessibility |
 | [page-layouts.md](page-layouts.md) | Screen inventory, information hierarchy, and navigation intent |
 | [persistence.md](persistence.md) | The DynamoDB table: key encoding, item attributes, the query behind each screen |
@@ -29,13 +30,6 @@ identities and one DynamoDB table holding the data.
 
 Not yet written, because it does not exist yet:
 
-- **backend** — the axum service in `crates/server` holds no domain logic. Its
-  whole surface is two endpoints that exist to give the frontend something real
-  to call: `GET /health`, returning `ok`, and `GET /api/dashboard`, returning a
-  `shared::Dashboard` as JSON, assembled from hardcoded values rather than from
-  the table [persistence.md](persistence.md) describes. It binds
-  `127.0.0.1:3000` and configures no CORS, for the reason given in DR-0001. A
-  document belongs here once the service does something.
 - **ci** — the pipeline that runs the Terraform applies and pushes the
   artefacts. Both halves exist as commands a person runs: `infra/` holds the
   configuration, and `just deploy-web` / `just deploy-api` push the artefacts.
@@ -62,3 +56,6 @@ Not yet written, because it does not exist yet:
 | [DR-0014](../decisions/DR-0014-action-type-icons-use-lucide-names-and-svgs.md) | Action type icons use Lucide canonical names and locally rendered SVGs |
 | [DR-0015](../decisions/DR-0015-one-dynamodb-table-keyed-by-owner-and-entity-kind.md) | One DynamoDB table holds every entity, keyed by owner and entity kind |
 | [DR-0016](../decisions/DR-0016-records-copy-their-action-types-display-attributes.md) | An action record copies its action type's display attributes |
+| [DR-0017](../decisions/DR-0017-the-service-reads-its-caller-from-the-adapters-request-context.md) | The service reads its caller from the adapter's request context |
+| [DR-0018](../decisions/DR-0018-the-service-runs-without-aws.md) | The service runs without AWS, on an in-memory store and a development owner |
+| [DR-0019](../decisions/DR-0019-the-icon-catalog-ships-lucide-geometry-not-lucide-components.md) | The icon catalog ships Lucide geometry, not `lucide-leptos` components |

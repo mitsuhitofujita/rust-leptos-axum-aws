@@ -1,6 +1,6 @@
 # Workspace
 
-Updated: 2026-08-08
+Updated: 2026-08-10
 
 ## Purpose
 
@@ -22,12 +22,21 @@ crates/
   app/                the Leptos SPA — compiled to wasm32-unknown-unknown
   server/             the axum API — compiled to the host target
   shared/             types crossing the boundary
+  icongen/            generates the action-type icon catalog; ships nothing
 docs/                 this documentation (see docs/README.md)
 ```
 
 `crates/shared` is depended on by both `app` and `server`; nothing else depends
 on anything else. `shared` must therefore stay free of platform-specific
 dependencies, since it is compiled for WASM and for the host alike.
+
+`crates/icongen` is a developer tool that happens to live in the workspace. It
+is run by hand, by `just icons`, and writes two source files that are committed:
+`crates/shared/src/icon_names.rs` and `crates/app/src/icon_catalog.rs`. Nothing
+depends on it and it depends on nothing that reaches a binary — its one
+dependency, `lucide-leptos`, has no feature enabled and compiles to an empty
+library, and is declared only so that `Cargo.lock` pins the version and cargo
+unpacks the source it reads (DR-0019).
 
 Third-party versions are declared once, in `[workspace.dependencies]` in the
 root `Cargo.toml`. Member crates use `dep.workspace = true` and add only the
@@ -58,9 +67,13 @@ version-mismatch failures — DR-0003.
 | `lint` | clippy for both targets, warnings denied |
 | `fmt` / `fmt-check` | rustfmt |
 | `test` | `cargo test --workspace` |
+| `icons` | regenerate the action-type icon catalog from the pinned `lucide-leptos`, and format what it wrote |
 | `clean` | `cargo clean` and remove `dist/` |
 
 Development needs `dev-api` and `dev-web` running together, in two terminals.
+Neither needs credentials or configuration: the API stores action types in
+memory when `TABLE_NAME` is unset, and the SPA disables sign-in when the two
+Cognito variables are (DR-0008, DR-0018).
 
 The `justfile` also holds the `tf-*` recipes that apply the infrastructure and
 the `deploy-*` recipes that push the artefacts. Both sets belong to
@@ -72,7 +85,11 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
   dependency to it breaks the WASM build of `crates/app`.
 - `crates/server` and `crates/shared` must not depend on Leptos. Keeping the
   framework confined to `crates/app` is what bounds the cost of a future 0.9
-  migration (DR-0002).
+  migration (DR-0002). `crates/icongen` is the exception the rule tolerates: it
+  reaches Leptos through `lucide-leptos`, compiles neither, and is not shipped.
+- Nothing runs `just icons`. The generated files, the pinned `lucide-leptos`
+  version and the category list in `crates/icongen` agree only because someone
+  ran it after moving one of them — DR-0019.
 - Checking the workspace for the host target is not sufficient. `crates/app`
   must also be checked for `wasm32-unknown-unknown`; `just check` and `just
   lint` do both.

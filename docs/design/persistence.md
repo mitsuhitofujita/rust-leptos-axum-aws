@@ -1,12 +1,13 @@
 # Persistence
 
-Updated: 2026-08-09
+Updated: 2026-08-10
 
-Note: the table exists and is empty. Nothing reads or writes it yet —
-`crates/server` still answers `GET /api/dashboard` from hardcoded values, the
-service holds no AWS SDK dependency, and the Cognito `sub` that this schema keys
-on is not yet extracted from the token. This document describes the store the
-service is being written against.
+Note: action types are stored. `crates/server` reads and writes the `TYPE#`
+half of this schema, and derives the partition key from the Cognito `sub` the
+authorizer validated (DR-0017). Action records are not — `GET /api/dashboard`
+still answers from hardcoded values, so nothing has yet written a `RECORD#`
+item. Everything below about records describes the store the service is being
+written against; everything about action types describes what it does.
 
 ## Purpose
 
@@ -92,9 +93,10 @@ reader never has to parse the key to display an item.
 
 | Screen | Query |
 | --- | --- |
-| Action types list | `pk = USER#<sub>` and `begins_with(sk, "TYPE#")` |
+| Action types list | `pk = USER#<sub>` and `begins_with(sk, "TYPE#")` — implemented |
 | Edit action type | `GetItem` on `pk`, `sk = TYPE#<id>` |
-| Create / edit / delete a type | `PutItem`, `UpdateItem`, `DeleteItem` on that key |
+| Create a type | `PutItem` on that key — implemented |
+| Edit / delete a type | `UpdateItem`, `DeleteItem` on that key |
 | Dashboard, ten recent records | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending, limit 10 |
 | Dashboard, ten-day summary | `pk = USER#<sub>` and `sk BETWEEN "RECORD#<from>" AND "RECORD#<to>"` |
 | Add action | `PutItem` |
@@ -155,7 +157,10 @@ user's partition, so a `Scan` against this table would be a defect; withholding
 the permission turns that defect into an error instead of a full-table read.
 
 The table name reaches the function as the `TABLE_NAME` environment variable.
-`crates/server` does not read it yet.
+`crates/server` reads it at startup, and its absence is what selects the
+in-memory store development runs on — so an unset variable is a working service
+with no table rather than a broken one (DR-0018). See
+[Backend](backend.md).
 
 ## Constraints
 
@@ -175,8 +180,13 @@ The table name reaches the function as the `TABLE_NAME` environment variable.
   reconciles the two, because they answer different questions — DR-0016.
 
 - **`icon` is a canonical kebab-case Lucide name from the supported catalog**,
-  never free text and never markup. An unknown name falls back to a generic
-  glyph in the frontend rather than rendering nothing — DR-0012, DR-0014.
+  never free text and never markup. The service checks a proposed name against
+  `shared::icon_names` before storing it, and an unknown name that is already
+  stored falls back to a generic glyph in the frontend rather than rendering
+  nothing — DR-0012, DR-0014, DR-0019.
+- **`name` and `unit` are stored trimmed, non-empty, and length-limited.** The
+  limits are the service's, in `crates/server/src/action_types.rs`; no document
+  fixes them, and nothing in the table enforces them.
 
 - **There is no secondary index, so any access pattern not answered by the
   primary key requires one.** Listing every record of a single action type
