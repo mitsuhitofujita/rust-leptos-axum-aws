@@ -13,6 +13,10 @@ leptos_router.workspace = true
 console_error_panic_hook.workspace = true
 gloo-net = { workspace = true, features = ["http", "json"] }
 
+# There is no lucide-leptos here. The action-type icons are Lucide's, but they
+# arrive as the generated src/icon_catalog.rs rather than as a dependency —
+# `crates/icongen` is what reads the crate, and DR-0014 records why.
+
 # src/auth.rs: the PKCE exchange and the session it keeps.
 serde.workspace = true
 serde_json.workspace = true
@@ -21,9 +25,13 @@ sha2.workspace = true
 wasm-bindgen.workspace = true
 js-sys.workspace = true
 
-# web-sys is feature-gated per browser interface; these are the ones auth.rs
-# touches. `Crypto` and `SubtleCrypto` are separate: the random bytes come from
-# the synchronous `getRandomValues`, so only `Crypto` is needed.
+# web-sys is feature-gated per browser interface. The first group is what
+# auth.rs touches — `Crypto` and `SubtleCrypto` are separate, and the random
+# bytes come from the synchronous `getRandomValues`, so only `Crypto` is needed.
+#
+# The second is the icon picker: `showModal` and `close` on the dialog, `focus`
+# on the control the dialog returns to, and `value` on the search field. Leptos
+# is what renders them; these are the three calls it does not make for us.
 web-sys = { workspace = true, features = [
   "Window",
   "Location",
@@ -31,4 +39,9 @@ web-sys = { workspace = true, features = [
   "Storage",
   "Crypto",
   "UrlSearchParams",
+
+  "HtmlButtonElement",
+  "HtmlDialogElement",
+  "HtmlElement",
+  "HtmlInputElement",
 ] }

@@ -1,0 +1,14 @@
+[package]
+name = "icongen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Not called, and no feature of it is enabled — with none on, its `cfg` gates
+# exclude every icon and it compiles to an empty library. The dependency is here
+# because it is what pins the version in Cargo.lock and what makes cargo unpack
+# the source this reads. Its geometry reaches the browser as the text this
+# generates, never as this crate — see src/main.rs and DR-0014.
+lucide-leptos.workspace = true

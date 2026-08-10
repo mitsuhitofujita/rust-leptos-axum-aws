@@ -11,9 +11,10 @@
 
 use std::fmt;
 
-use gloo_net::http::Request;
+use gloo_net::http::{RequestBuilder, Response};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
-use shared::Dashboard;
+use shared::{ActionType, Dashboard, NewActionType};
 
 use crate::auth;
 
@@ -62,13 +63,11 @@ impl fmt::Display for ApiError {
     }
 }
 
-/// Starts a request to an absolute API path, carrying the access token when the
-/// tab holds one.
+/// Attaches the access token when the tab holds one.
 ///
 /// No token is not an error: an unconfigured build has none, and the local API
 /// checks nothing, so the call goes out bare and is answered.
-fn get(path: &str) -> gloo_net::http::RequestBuilder {
-    let request = Request::get(&url(path));
+fn authorized(request: RequestBuilder) -> RequestBuilder {
     match auth::access_token() {
         Some(token) => request.header("Authorization", &format!("Bearer {token}")),
         None => request,
@@ -76,24 +75,51 @@ fn get(path: &str) -> gloo_net::http::RequestBuilder {
 }
 
 /// Sends a GET and decodes its body.
-///
-/// One place separates 401 from every other failure, so every endpoint added
-/// below inherits that treatment rather than restating it.
 async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, ApiError> {
-    let response = get(path)
+    let response = authorized(gloo_net::http::Request::get(&url(path)))
         .send()
         .await
         .map_err(|err| ApiError::Other(format!("request failed: {err}")))?;
 
+    decode(response).await
+}
+
+/// Sends a JSON body and decodes what comes back.
+async fn post_json<B: Serialize, T: DeserializeOwned>(path: &str, body: &B) -> Result<T, ApiError> {
+    let request = authorized(gloo_net::http::Request::post(&url(path)))
+        .json(body)
+        .map_err(|err| ApiError::Other(format!("could not encode the request: {err}")))?;
+
+    let response = request
+        .send()
+        .await
+        .map_err(|err| ApiError::Other(format!("request failed: {err}")))?;
+
+    decode(response).await
+}
+
+/// Turns a response into a value or an [`ApiError`].
+///
+/// One place separates 401 from every other failure, so every endpoint below
+/// inherits that treatment rather than restating it.
+///
+/// A rejected request answers with its reason in the body, and that reason is
+/// what the visitor needs — a screen reporting `400` where it could report
+/// `unit is required` is reporting the wrong thing. The status stands in only
+/// when there is nothing to say.
+async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, ApiError> {
     if response.status() == 401 {
         return Err(ApiError::Unauthorized);
     }
 
     if !response.ok() {
-        return Err(ApiError::Other(format!(
-            "unexpected status: {}",
-            response.status()
-        )));
+        let status = response.status();
+        let reason = response.text().await.unwrap_or_default();
+        return Err(ApiError::Other(if reason.trim().is_empty() {
+            format!("unexpected status: {status}")
+        } else {
+            reason
+        }));
     }
 
     response
@@ -105,4 +131,19 @@ async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, ApiError> {
 /// The ten-day summary and the ten most recent records, in one response.
 pub async fn fetch_dashboard() -> Result<Dashboard, ApiError> {
     get_json("/api/dashboard").await
+}
+
+/// Every action type this account has registered, oldest first.
+///
+/// The order is the store's: the identifier is a ULID and the query returns the
+/// partition in key order, so registration order comes for free. No screen has
+/// asked for another one.
+pub async fn fetch_action_types() -> Result<Vec<ActionType>, ApiError> {
+    get_json("/api/action-types").await
+}
+
+/// Registers an action type, and answers with the stored one — including the
+/// identifier the service assigned it.
+pub async fn create_action_type(new: &NewActionType) -> Result<ActionType, ApiError> {
+    post_json("/api/action-types", new).await
 }

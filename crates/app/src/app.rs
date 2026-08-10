@@ -5,9 +5,10 @@ use leptos_router::components::{A, Route, Router, Routes};
 use leptos_router::hooks::use_navigate;
 use leptos_router::path;
 
+use crate::action_types::{ActionTypesPage, NewActionTypePage};
 use crate::auth::{self, AuthState};
 use crate::dashboard::DashboardPage;
-use crate::home::HomePage;
+use crate::home::{HomePage, ProfileImage};
 
 /// The auth state, shared through context so every screen reads the same one. A
 /// signal rather than a resource: `complete_sign_in` runs once at mount, and
@@ -74,6 +75,17 @@ pub fn App() -> impl IntoView {
                         <Route
                             path=path!("/dashboard")
                             view=|| view! { <RequireAuth><DashboardPage /></RequireAuth> }
+                        />
+                        // Creation before the index, so the two paths read in
+                        // the order the visitor meets them. The router matches
+                        // on the pattern, not on this order.
+                        <Route
+                            path=path!("/action-types/new")
+                            view=|| view! { <RequireAuth><NewActionTypePage /></RequireAuth> }
+                        />
+                        <Route
+                            path=path!("/action-types")
+                            view=|| view! { <RequireAuth><ActionTypesPage /></RequireAuth> }
                         />
                     </Routes>
                 </main>
@@ -153,6 +165,31 @@ pub fn RequireAuth(children: ChildrenFn) -> impl IntoView {
     }
 }
 
+/// The control an authenticated application screen carries at the end of its
+/// top row.
+///
+/// Page Layouts requires it to reach the action-type area, and it is the only
+/// route to that area from the dashboard, so it links there directly rather
+/// than opening a menu with one entry.
+#[component]
+pub fn AccountControl() -> impl IntoView {
+    let auth_state = auth_state();
+    let picture = move || match auth_state.get() {
+        AuthState::SignedIn { picture, .. } => picture,
+        _ => None,
+    };
+
+    view! {
+        <A
+            href="/action-types"
+            attr:class="profile-button"
+            attr:aria-label="Open your action types"
+        >
+            {move || view! { <ProfileImage picture=picture() /> }}
+        </A>
+    }
+}
+
 /// The wordmark row. `children` is the account control, present only on the
 /// screens that have one.
 #[component]
@@ -172,10 +209,9 @@ pub fn SiteHeader(#[prop(optional)] children: Option<Children>) -> impl IntoView
 /// Answers every path the router does not know.
 ///
 /// Two of those paths are reachable by design rather than by mistake: a
-/// dashboard row links to action creation and the account control to the
-/// action-type area, and neither screen has a defined layout yet. Page Layouts
-/// is explicit that they must not be inferred from the screens that do, so the
-/// links point where they will eventually go and this answers until they arrive.
+/// dashboard row links to action creation, and an action-type row to editing
+/// that type. Neither screen exists yet, so the links point where they will
+/// eventually go and this answers until they arrive.
 #[component]
 fn NotFound() -> impl IntoView {
     view! {

@@ -6,6 +6,15 @@ project := "rust-leptos-axum-aws"
 default:
     @just --list
 
+# Regenerate the action-type icon catalog from the pinned lucide-leptos.
+#
+# Nothing runs this automatically. The generated tables and the pin agree only
+# because this was run after the pin, or the category list in
+# crates/app/Cargo.toml, last moved — see crates/icongen and DR-0014.
+icons:
+    cargo run -p icongen
+    cargo fmt -p shared -p app
+
 # Frontend dev server on http://localhost:8080 (proxies /api to the API server).
 dev-web:
     trunk serve

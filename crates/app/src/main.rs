@@ -1,8 +1,11 @@
+mod action_types;
 mod api;
 mod app;
 mod auth;
 mod dashboard;
 mod home;
+mod icon_catalog;
+mod icon_picker;
 mod icons;
 
 use app::App;

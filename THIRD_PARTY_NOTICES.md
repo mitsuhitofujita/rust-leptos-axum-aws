@@ -2,7 +2,8 @@
 
 ## Lucide Icons
 
-The action-type design references include SVG geometry from
+The action-type design references and the generated catalog in
+`crates/app/src/icon_catalog.rs` include SVG geometry from
 [Lucide](https://lucide.dev/), version 1.30.0. The license below is reproduced
 verbatim from that version's `LICENSE` file.
 
@@ -52,5 +53,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-When the frontend begins rendering icons through `lucide-leptos`, this file
-must also carry that crate's own license notice (DR-0014).
+## lucide-leptos
+
+The frontend renders those icons through
+[`lucide-leptos`](https://github.com/RustForWeb/lucide), version 3.26.0, which
+is a separate work from Lucide itself and carries its own license. The two
+version numbers are pinned independently: neither implies the other, because the
+crate's version does not encode the Lucide release it vendors (DR-0014).
+
+```text
+MIT License
+
+Copyright (c) 2024 Rust for Web
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+```

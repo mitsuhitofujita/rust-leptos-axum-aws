@@ -16,6 +16,11 @@ leptos_router = "0.8.15"
 console_error_panic_hook = "0.1.7"
 gloo-net = { version = "0.7.0", default-features = false }
 
+# The action-type icon catalog. Two versions are pinned separately and neither
+# implies the other: this crate's, and the Lucide release its geometry comes
+# from, which THIRD_PARTY_NOTICES.md names — DR-0014.
+lucide-leptos = "3.26.0"
+
 # The browser APIs the sign-in flow reaches for directly. These versions are the
 # ones leptos and gloo-net already resolve to, and wasm-bindgen in particular is
 # pinned to what is in Cargo.lock: trunk downloads a wasm-bindgen CLI matching
@@ -27,6 +32,21 @@ web-sys = "0.3.103"
 
 axum = "0.8.9"
 tokio = "1.53.1"
+
+# The store. The SDK is the only way to reach DynamoDB, and `aws-config` is what
+# resolves credentials and region — in Lambda from the execution environment,
+# locally from whatever the developer has.
+aws-config = "1.10.1"
+aws-sdk-dynamodb = "1.120.0"
+
+# An identifier that sorts by creation time and needs no coordination to mint,
+# which is what the sort key encoding asks for — DR-0015.
+ulid = "3.0.0"
+
+# One formatted instant. `created_at` and the key it is embedded in have to be
+# fixed-width RFC 3339 in UTC or the sort key orders wrongly, and calendar
+# arithmetic is not something to hand-roll for a value that fails silently.
+time = { version = "0.3.55", features = ["formatting", "macros"] }
 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"

@@ -6,15 +6,11 @@ use shared::{ActionRecord, RecentSummary};
 use wasm_bindgen::JsValue;
 
 use crate::api::{ApiError, fetch_dashboard};
-use crate::app::{SiteHeader, auth_state, note_unauthorized};
-use crate::auth::AuthState;
-use crate::home::ProfileImage;
+use crate::app::{AccountControl, SiteHeader, note_unauthorized};
 use crate::icons::{ActivityGlyph, Plus};
 
 #[component]
 pub fn DashboardPage() -> impl IntoView {
-    let auth_state = auth_state();
-
     // `LocalResource` rather than `Resource`: the browser fetch future is not
     // `Send`, and in a CSR build nothing ever runs on the server.
     //
@@ -33,24 +29,8 @@ pub fn DashboardPage() -> impl IntoView {
         }
     });
 
-    // The account control an authenticated application screen carries at the end
-    // of its top row. Page Layouts requires it to reach the action-type area;
-    // that screen has no defined layout yet, so the link points where it will
-    // live and the router's fallback answers until it does.
-    let account_control = move || {
-        let picture = match auth_state.get() {
-            AuthState::SignedIn { picture, .. } => picture,
-            _ => None,
-        };
-        view! {
-            <A href="/action-types" attr:class="profile-button" attr:aria-label="Open your action types">
-                <ProfileImage picture=picture />
-            </A>
-        }
-    };
-
     view! {
-        <SiteHeader>{account_control}</SiteHeader>
+        <SiteHeader><AccountControl /></SiteHeader>
 
         <section class="page-heading" aria-labelledby="page-title">
             <p class="eyebrow">"Your progress"</p>

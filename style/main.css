@@ -68,8 +68,22 @@ body {
 }
 
 button,
+input,
 a {
   font: inherit;
+}
+
+/* Text for assistive technology only: the current icon's name behind the
+   compact selector, which shows the glyph and no words. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 /* --- Application shell ---------------------------------------------------
@@ -728,6 +742,623 @@ h1 em {
   height: 12px;
 }
 
+/* --- Action types index -------------------------------------------------- */
+
+/* The one full-width solid accent control on the screen: it opens creation. */
+.add-button {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  padding: 0 var(--space-md) 0 var(--space-lg);
+  border-radius: var(--space-md);
+  color: var(--white);
+  background: var(--accent);
+  box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+  font-size: var(--font-body);
+  font-weight: 800;
+  text-decoration: none;
+  animation: enter 580ms 70ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.add-button:hover {
+  background: var(--accent-dark);
+  box-shadow: 0 16px 30px rgba(199, 30, 75, 0.28);
+  transform: translateY(-1px);
+}
+
+.add-button:active {
+  transform: translateY(1px);
+}
+
+.add-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.add-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--accent-dark);
+  background: var(--white);
+  place-items: center;
+}
+
+.add-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.type-count {
+  color: #9d818a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.type-list {
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--space-lg);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 10px 28px rgba(93, 40, 57, 0.055);
+  list-style: none;
+  animation: enter 600ms 130ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.type-item + .type-item {
+  border-top: 1px solid var(--line);
+}
+
+/* The whole row opens that type for editing. */
+.type-link {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+
+.type-link:hover {
+  background: var(--rose-100);
+}
+
+.type-link:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid rgba(231, 53, 98, 0.18);
+  outline-offset: -3px;
+}
+
+.type-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.type-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.type-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Truncates before displacing the unit, which stays on one line. */
+.type-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-value {
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.edit-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--accent-dark);
+  background: var(--rose-100);
+  place-items: center;
+  transition: transform 160ms ease;
+}
+
+.type-link:hover .edit-icon {
+  transform: translateX(2px);
+}
+
+.edit-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The state the HTML reference does not define. Every account starts here, so
+   it needs one — and it keeps the surface the populated list has, so the screen
+   does not change shape when the first type lands on it. */
+.empty-types {
+  margin: 0;
+  padding: var(--space-lg);
+  border: 1px dashed var(--rose-200);
+  border-radius: var(--space-lg);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.5);
+  font-size: var(--font-small);
+  line-height: 1.6;
+  text-align: center;
+  animation: enter 600ms 130ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* --- Action type form ---------------------------------------------------- */
+
+/* A flex column filling the shell, so the action group below can be pushed to
+   the bottom of a tall viewport while staying after the fields in document and
+   keyboard order. */
+.create-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin-top: var(--space-lg);
+  animation: enter 580ms 70ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.form-card {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--space-lg);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 10px 28px rgba(93, 40, 57, 0.055);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.field-label {
+  font-size: var(--font-small);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.text-input {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 var(--space-md);
+  border: 1px solid #e6d6db;
+  border-radius: var(--space-md);
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: inset 0 1px 2px rgba(93, 40, 57, 0.025);
+  font-size: var(--font-body);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.text-input::placeholder {
+  color: #b298a0;
+  opacity: 1;
+}
+
+.text-input:hover {
+  border-color: #d5aab6;
+}
+
+.text-input:focus {
+  border-color: var(--accent);
+  outline: 3px solid rgba(231, 53, 98, 0.18);
+  outline-offset: 2px;
+  box-shadow: 0 5px 14px rgba(93, 40, 57, 0.06);
+}
+
+.field-help {
+  margin: var(--space-2xs) 0 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+  line-height: 1.5;
+}
+
+/* Icon-only, so the form's height does not grow with the catalog. The field
+   label beside it supplies the purpose and a visually hidden Lucide name
+   supplies the value — DR-0013, DR-0014. */
+.icon-select {
+  display: flex;
+  width: 68px;
+  min-height: 68px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #e6d6db;
+  border-radius: var(--space-md);
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: inset 0 1px 2px rgba(93, 40, 57, 0.025);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.icon-select:hover {
+  border-color: #d5aab6;
+  box-shadow: 0 5px 14px rgba(93, 40, 57, 0.06);
+  transform: translateY(-1px);
+}
+
+.icon-select:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.selected-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.selected-icon svg,
+.result-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.form-actions {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: auto;
+  padding-top: var(--space-xl);
+}
+
+.primary-button {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
+  border: 0;
+  border-radius: var(--space-md);
+  color: var(--white);
+  background: var(--accent);
+  box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+  font-size: var(--font-body);
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.primary-button:hover {
+  background: var(--accent-dark);
+  box-shadow: 0 16px 30px rgba(199, 30, 75, 0.28);
+  transform: translateY(-1px);
+}
+
+.primary-button:active {
+  transform: translateY(1px);
+}
+
+.primary-button:focus-visible,
+.cancel-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.primary-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A request in flight. The label changes too, so this is not the only signal. */
+.primary-button:disabled {
+  box-shadow: none;
+  cursor: progress;
+  opacity: 0.55;
+  transform: none;
+}
+
+.cancel-link {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--space-sm);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.cancel-link:hover {
+  color: var(--accent-dark);
+  background: var(--rose-100);
+}
+
+/* --- Icon picker --------------------------------------------------------- */
+
+/* A native dialog: it is what keeps focus inside, closes on Escape, and returns
+   nothing to the form on its own — DR-0013. */
+.icon-dialog {
+  width: calc(100% - (2 * var(--client-gutter)));
+  max-width: calc(var(--app-width) - (2 * var(--client-gutter)));
+  max-height: calc(100dvh - (2 * var(--space-md)));
+  margin: auto;
+  padding: var(--space-lg);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--space-lg);
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: 0 26px 70px rgba(41, 21, 28, 0.28);
+}
+
+.icon-dialog[open] {
+  animation: enter 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.icon-dialog::backdrop {
+  background: rgba(41, 21, 28, 0.46);
+  backdrop-filter: blur(var(--space-2xs));
+  -webkit-backdrop-filter: blur(var(--space-2xs));
+}
+
+.icon-dialog-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.icon-dialog-label {
+  margin: 0 0 var(--space-xs);
+  color: var(--accent-dark);
+  font-size: var(--font-caption);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.icon-dialog h2 {
+  margin: 0;
+  font-size: var(--font-title);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.icon-dialog-close {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--rose-50);
+  cursor: pointer;
+  place-items: center;
+}
+
+.icon-dialog-close:hover {
+  color: var(--ink);
+  background: var(--rose-100);
+}
+
+.icon-dialog-close:focus-visible,
+.icon-search:focus-visible,
+.apply-icon-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.icon-dialog-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.search-field {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-lg);
+}
+
+.icon-search {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 var(--space-md);
+  border: 1px solid #e6d6db;
+  border-radius: var(--space-md);
+  color: var(--ink);
+  background: var(--rose-50);
+  font-size: var(--font-body);
+}
+
+.icon-search::placeholder {
+  color: #b298a0;
+  opacity: 1;
+}
+
+.results-meta {
+  margin: var(--space-md) 0 var(--space-xs);
+  color: var(--muted);
+  font-size: var(--font-small);
+  font-weight: 700;
+}
+
+.icon-results {
+  display: grid;
+  max-height: 42dvh;
+  overflow-y: auto;
+  gap: var(--space-xs);
+  padding: var(--space-2xs);
+  overscroll-behavior: contain;
+}
+
+.icon-result {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* The radio is what carries the group's keyboard behaviour and its checked
+   state, so it is hidden rather than replaced. */
+.icon-result input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.icon-result-surface {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--space-md);
+  background: var(--white);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.icon-result:hover .icon-result-surface {
+  background: var(--rose-50);
+}
+
+.icon-result input:checked + .icon-result-surface {
+  border-color: var(--rose-200);
+  background: var(--rose-100);
+}
+
+/* Focus stays visually distinct from the checked state: they are different
+   things and either can be true without the other. */
+.icon-result input:focus-visible + .icon-result-surface {
+  outline: var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.result-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.result-name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.result-check {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border-radius: 50%;
+  color: var(--white);
+  background: var(--accent);
+  opacity: 0;
+  place-items: center;
+}
+
+.icon-result input:checked + .icon-result-surface .result-check {
+  opacity: 1;
+}
+
+.result-check svg {
+  width: 12px;
+  height: 12px;
+}
+
+.empty-results {
+  margin: var(--space-md) 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.icon-result[hidden] {
+  display: none;
+}
+
+.apply-icon-button {
+  width: 100%;
+  min-height: 56px;
+  margin-top: var(--space-md);
+  padding: 0 var(--space-md);
+  border: 0;
+  border-radius: var(--space-md);
+  color: var(--white);
+  background: var(--accent);
+  box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+  font-size: var(--font-body);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.apply-icon-button:disabled {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 /* --- Fallback view ------------------------------------------------------- */
 
 .not-found {
@@ -797,6 +1428,28 @@ h1 em {
 
   .dashboard-card {
     min-height: 162px;
+  }
+
+  .add-button,
+  .create-form {
+    margin-top: var(--space-md);
+  }
+
+  .form-card {
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .form-actions {
+    padding-top: var(--space-lg);
+  }
+
+  .icon-dialog {
+    padding: var(--space-md);
+  }
+
+  .search-field {
+    margin-top: var(--space-md);
   }
 }
 

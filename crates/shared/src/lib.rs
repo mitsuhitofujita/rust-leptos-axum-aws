@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod icon_names;
+
 /// A kind of action, registered before any of its actions are recorded. It
 /// supplies both the displayed name and the unit of the numeric value, so
 /// `Running` and `km` are what make the record `Running — 5.2 km`.
@@ -16,10 +18,23 @@ pub struct ActionType {
     pub id: String,
     pub name: String,
     pub unit: String,
-    /// Which glyph the frontend draws for this type — an identifier such as
-    /// `running`, not markup. `shared` is compiled for the server too and must
-    /// not carry a view; an id the frontend does not know falls back to a
-    /// generic glyph rather than rendering nothing.
+    /// Which glyph the frontend draws for this type — a canonical kebab-case
+    /// Lucide name such as `person-standing`, not markup. `shared` is compiled
+    /// for the server too and must not carry a view, so this side of the wire
+    /// holds only [`icon_names`]; a name the frontend does not know falls back
+    /// to a generic glyph rather than rendering nothing (DR-0014).
+    pub icon: String,
+}
+
+/// What creating an action type takes: everything [`ActionType`] has except the
+/// identifier, which the service assigns.
+///
+/// A separate type rather than an [`ActionType`] with an ignored `id`, so that
+/// a client cannot appear to choose one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewActionType {
+    pub name: String,
+    pub unit: String,
     pub icon: String,
 }
 
