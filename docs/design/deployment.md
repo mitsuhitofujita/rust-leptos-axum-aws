@@ -1,6 +1,6 @@
 # Deployment
 
-Updated: 2026-08-09
+Updated: 2026-08-11
 
 Note: all five layers have been applied and their twelve SSM parameters exist.
 The API is deployed and `GET /health` returns `ok`. The table is empty and
@@ -178,9 +178,19 @@ the layer.
 `{proxy+}` means a new *endpoint* under `/api` in `crates/server` needs no change
 to the infrastructure. A new *method* does: it goes in `local.api_methods` in
 `infra/api/apigateway.tf`, which both this route set and the CORS
-`allow_methods` list derive from. The methods are enumerated rather than covered
-by a single `ANY` route so that the HTTP API answers CORS preflight itself —
-DR-0009, and the CORS constraint below.
+`allow_methods` list derive from — and, since DR-0021, `crates/devgateway`'s
+route table as well. The methods are enumerated rather than covered by a single
+`ANY` route so that the HTTP API answers CORS preflight itself — DR-0009, and the
+CORS constraint below.
+
+**The edge is reproduced locally.** Everything this section describes between the
+browser and the service — the route table, the preflight answered ahead of the
+authorizer, the 401 for a request with no token, and the `x-amzn-request-context`
+header the adapter forwards — exists in `crates/devgateway` as well, in front of
+the unmodified binary, so that an assumption about the edge can be checked before
+an apply rather than after one (DR-0021). It is a mirror of this configuration
+and not a second source of truth: it verifies nothing about AWS itself, and a
+change here has to be made there too.
 
 ### Deploying artefacts
 
@@ -291,6 +301,12 @@ without running either.
   `/api/*` is deliberately not routed through CloudFront as a second origin,
   which would have made the SPA single-origin and removed CORS entirely —
   DR-0008.
+
+- **A bundle built without the two Cognito variables is refused by the edge, and
+  that is now visible locally.** Behind `just dev-gateway` a `dev-web` bundle gets
+  a 401 on every `/api` call, for the same reason the deployed one does: it sends
+  no `Authorization` header. Reaching the API from a browser against the local rig
+  means `just dev-web-auth` and a real token — DR-0021.
 
 - **One Cognito app client serves production and local development alike**, so
   its callback and logout URLs list the CloudFront domain *and*

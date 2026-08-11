@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 ## Purpose
 
@@ -32,7 +32,7 @@ the workspace manifest is virtual and cannot itself be a trunk target:
 | File | Role |
 | --- | --- |
 | `index.html` | trunk entry point; points `data-trunk rel="rust"` at `crates/app/Cargo.toml` |
-| `Trunk.toml` | dev server address and port, and the `/api` proxy |
+| `Trunk.toml` | dev server address and port. The `/api` proxy is *not* here — see below |
 | `style/main.css` | plain CSS, linked by `index.html` |
 | `public/` | assets copied verbatim into `dist/public/` |
 
@@ -197,9 +197,13 @@ dependency of `crates/icongen` alone (DR-0019).
   `API_BASE_URL`, which is supplied at build time and not fetched at runtime, so
   the development proxy and the production origin are both settled outside the
   code — DR-0008.
-- The dev server proxies `/api` to `127.0.0.1:3000`, so development is
-  single-origin and CORS never arises. Production is cross-origin and requires
-  CORS on the API — DR-0001.
+- The dev server proxies `/api` so that development is single-origin and CORS
+  never arises. Production is cross-origin and requires CORS on the API —
+  DR-0001. Which backend it proxies to is chosen by the recipe rather than by
+  `Trunk.toml`, which holds no `[[proxy]]` block: `dev-web` and `dev-web-auth`
+  pass `127.0.0.1:3000`, the service itself, and `dev-web-gateway` passes
+  `127.0.0.1:3001`, the edge stand-in in front of it — DR-0021. A bare
+  `trunk serve` outside `just` therefore proxies nothing.
 - Every request under `/api` needs a Cognito access token in an `Authorization`
   header, which `auth.rs` obtains from the hosted UI and `api.rs` attaches — but
   only in a build configured for it. An unconfigured build sends no header, which

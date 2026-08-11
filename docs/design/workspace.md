@@ -23,6 +23,7 @@ crates/
   server/             the axum API — compiled to the host target
   shared/             types crossing the boundary
   icongen/            generates the action-type icon catalog; ships nothing
+  devgateway/         stands in for the deployed edge locally; ships nothing
 docs/                 this documentation (see docs/README.md)
 ```
 
@@ -37,6 +38,16 @@ depends on it and it depends on nothing that reaches a binary — its one
 dependency, `lucide-leptos`, has no feature enabled and compiles to an empty
 library, and is declared only so that `Cargo.lock` pins the version and cargo
 unpacks the source it reads (DR-0019).
+
+`crates/devgateway` is the second of that kind. It is an axum binary that plays
+API Gateway and the Lambda Web Adapter in front of the unmodified service, so
+that the route table, the preflight answer, the 401 and the
+`x-amzn-request-context` header can be exercised without a deployment (DR-0021).
+It depends on nothing in the workspace — least of all on `crates/server`, which
+is the point — and nothing depends on it. Its one third-party dependency beyond
+what the service already uses is `hyper-util`, for the forwarding leg; it was
+already in `Cargo.lock` underneath axum, and it talks plain HTTP to loopback, so
+no TLS stack and no system package came with it.
 
 Third-party versions are declared once, in `[workspace.dependencies]` in the
 root `Cargo.toml`. Member crates use `dep.workspace = true` and add only the
@@ -67,7 +78,9 @@ against without a deployment — DR-0020.
 | --- | --- |
 | `dev-web` | `trunk serve` — frontend on :8080, proxying `/api` to :3000 |
 | `dev-web-auth` | the same dev server with sign-in switched on; resolves the two Cognito values from SSM, so it needs AWS credentials |
+| `dev-web-gateway` | the same dev server with `/api` proxied to :3001 instead, so it goes through `dev-gateway` |
 | `dev-api` | `cargo run -p server` — API on :3000, on the in-memory store |
+| `dev-gateway` | `cargo run -p devgateway` — the edge stand-in on :3001, forwarding to :3000 |
 | `dynamo` | DynamoDB Local on :8000, in memory, `-sharedDb`, and reporting nothing to AWS |
 | `dynamo-stop` | stop it, for when Ctrl-C in its own terminal is not available |
 | `dynamo-table` | create the local table, idempotently; needs `dynamo` running |
@@ -92,6 +105,20 @@ a fresh clone changes if they are never used (DR-0020). The credentials those
 recipes pass are fake on purpose — a process that cannot authenticate anywhere
 cannot reach the real table by accident.
 
+`dev-gateway` and `dev-web-gateway` are the second such mode, and reproduce the
+other half of what a deployment adds: `dev-gateway` sits between the two and
+plays API Gateway and the Lambda Web Adapter, so `/api` needs an `Authorization`
+header, a method outside the route table is a 404, `OPTIONS` is answered without
+a token, and the request context arrives as the header the service reads
+(DR-0021). Any bearer value works — a JWT is decoded without being verified, and
+anything else is taken as the subject itself, so `Bearer alice` and `Bearer bob`
+are two callers whose partitions can be compared. `DEVGATEWAY_MODE=passthrough`
+turns all of it off, which is what `just dev-api` alone already is. Three
+terminals when this is in use, and two when it is not.
+
+The `/api` proxy target lives in these recipes rather than in `Trunk.toml`,
+because there are two things it can point at — see the constraint below.
+
 The `justfile` also holds the `tf-*` recipes that apply the infrastructure and
 the `deploy-*` recipes that push the artefacts. Both sets belong to
 `deployment.md` and are described there, not here.
@@ -107,6 +134,17 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
 - Nothing runs `just icons`. The generated files, the pinned `lucide-leptos`
   version and the category list in `crates/icongen` agree only because someone
   ran it after moving one of them — DR-0019.
+- **`Trunk.toml` holds no `[[proxy]]` block; each `dev-web*` recipe passes
+  `--proxy-backend`.** There are two backends the dev server can want, and trunk
+  *appends* a command-line backend to the file's entries rather than overriding
+  them, so a default in the file could not be overridden and two entries would
+  both claim `/api`. The cost is that a bare `trunk serve` outside `just` no
+  longer proxies — DR-0021.
+- **`crates/devgateway`'s route table is a hand-maintained copy of
+  `local.api_methods`** in `infra/api/apigateway.tf`, as `dynamo_table` and
+  `project` are copies of Terraform values. A method added there has a second
+  place to follow it, and a drift shows up the first time the stand-in is used
+  and not before — DR-0021.
 - `just dynamo` must keep `-sharedDb`. Without it DynamoDB Local keeps a
   separate database per access key and region, so `dynamo-table` and
   `dev-api-dynamo` would create and query two different tables, both would
