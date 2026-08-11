@@ -42,7 +42,7 @@ dev-api:
 #
 # dev-api above runs the in-memory store, so the DynamoDB half of crates/server
 # is compiled by every build and executed by nothing until it is deployed
-# (DR-0018). These three recipes are how it is executed here instead: DynamoDB
+# (DR-0018). The recipes below are how it is executed here instead: DynamoDB
 # Local, the table, and the same binary pointed at both.
 #
 # crates/server knows nothing about any of this. AWS_ENDPOINT_URL_DYNAMODB is
