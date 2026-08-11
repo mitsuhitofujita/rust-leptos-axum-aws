@@ -1,7 +1,7 @@
 # Verifying real Cognito tokens locally
 
-Status: in progress — built and checked without AWS; the four checks against a
-real pool remain, and the Design Document updates await confirmation
+Status: in progress — built, documented and checked without AWS. Retirement waits
+on the four checks against a real pool listed under Verification.
 Started: 2026-08-11
 Branch: main
 
@@ -203,7 +203,7 @@ issuer and app client id resolve from SSM into a working configuration.
 ## Retirement
 
 - [x] Design Documents updated — `deployment.md`, `workspace.md`, and the
-      `index.md` record table (drafted; awaiting confirmation, per `docs/README.md`)
+      `index.md` record table. Confirmed and committed.
 - [x] Decision Records written — DR-0022. The second phase's did not cover it:
       DR-0021 decided that the edge is reproduced outside the service, not that
       real tokens are verified against the real pool
@@ -213,4 +213,17 @@ issuer and app client id resolve from SSM into a working configuration.
       rejection and the eager fetch are DR-0022's Decision and Consequences; the
       `openssl` PKCS#1/PKCS#8 trap and the `aws-lc-rs` default-features trap are
       in `testkey.rs` and the root `Cargo.toml` beside the code they explain
-- [ ] No durable document depends on this log
+- [x] No durable document depends on this log — `docs/design/` and
+      `docs/decisions/` were searched for this file's name and the plan's, and
+      neither appears. The fourth phase's log cites this one, but only in its
+      Request section, which records what was asked and is not rewritten.
+
+**All four hold, and the log still stays.** The checklist is about the durable
+layer, and the durable layer is complete. What is not complete is the work: the
+`cognito` mode has never been pointed at a real Cognito pool, and that fact lives
+nowhere but the Verification section above. It cannot be moved. A Design Document
+says what the system is, not how far its verification got; DR-0022 is accepted and
+append-only, so it cannot be amended to admit this afterwards. Deleting the log
+now would not preserve the knowledge — it would discard it.
+
+So this log is retired once the four checks are run, and not before.
