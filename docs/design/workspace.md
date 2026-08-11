@@ -41,13 +41,20 @@ unpacks the source it reads (DR-0019).
 
 `crates/devgateway` is the second of that kind. It is an axum binary that plays
 API Gateway and the Lambda Web Adapter in front of the unmodified service, so
-that the route table, the preflight answer, the 401 and the
-`x-amzn-request-context` header can be exercised without a deployment (DR-0021).
-It depends on nothing in the workspace — least of all on `crates/server`, which
-is the point — and nothing depends on it. Its one third-party dependency beyond
-what the service already uses is `hyper-util`, for the forwarding leg; it was
-already in `Cargo.lock` underneath axum, and it talks plain HTTP to loopback, so
-no TLS stack and no system package came with it.
+that the route table, the preflight answer, the 401, the
+`x-amzn-request-context` header (DR-0021) and the JWT authorizer's verdict
+(DR-0022) can be exercised without a deployment. It depends on nothing in the
+workspace — least of all on `crates/server`, which is the point — and nothing
+depends on it.
+
+Its three third-party dependencies beyond what the service already uses are
+`hyper-util` for the forwarding leg, and `hyper-rustls` and `aws-lc-rs` for the
+JWKS fetch and the signature check in `cognito` mode. All three were already in
+`Cargo.lock` — the first underneath axum, the other two underneath
+`aws-sdk-dynamodb` — so declaring them adds dependency edges and no packages, and
+the devcontainer image needs nothing new. `aws-lc-rs` is declared without default
+features, because `ring-io` and `ring-sig-verify` are a compatibility surface for
+code ported from `ring` and would have been the one thing to add a package.
 
 Third-party versions are declared once, in `[workspace.dependencies]` in the
 root `Cargo.toml`. Member crates use `dep.workspace = true` and add only the
@@ -81,6 +88,7 @@ against without a deployment — DR-0020.
 | `dev-web-gateway` | the same dev server with `/api` proxied to :3001 instead, so it goes through `dev-gateway` |
 | `dev-api` | `cargo run -p server` — API on :3000, on the in-memory store |
 | `dev-gateway` | `cargo run -p devgateway` — the edge stand-in on :3001, forwarding to :3000 |
+| `dev-gateway-cognito` | the same stand-in verifying real tokens against the pool; resolves the issuer and app client id from SSM, so it needs AWS credentials |
 | `dynamo` | DynamoDB Local on :8000, in memory, `-sharedDb`, and reporting nothing to AWS |
 | `dynamo-stop` | stop it, for when Ctrl-C in its own terminal is not available |
 | `dynamo-table` | create the local table, idempotently; needs `dynamo` running |
@@ -116,6 +124,14 @@ are two callers whose partitions can be compared. `DEVGATEWAY_MODE=passthrough`
 turns all of it off, which is what `just dev-api` alone already is. Three
 terminals when this is in use, and two when it is not.
 
+`dev-gateway-cognito` is the same stand-in with the authorizer's actual verdict
+switched on: the token is verified against the pool's published keys and against
+the `issuer` and `audience` in `infra/api/apigateway.tf`, so a wrong one is
+visible before an apply rather than as a 401 after it (DR-0022). It is the one
+recipe here that needs AWS credentials and the network, and it is the exchange
+for `Bearer alice`, which cannot survive verification — see the constraint below.
+Everything else about the two is identical, `dev-web-gateway` included.
+
 The `/api` proxy target lives in these recipes rather than in `Trunk.toml`,
 because there are two things it can point at — see the constraint below.
 
@@ -144,7 +160,21 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
   `local.api_methods`** in `infra/api/apigateway.tf`, as `dynamo_table` and
   `project` are copies of Terraform values. A method added there has a second
   place to follow it, and a drift shows up the first time the stand-in is used
-  and not before — DR-0021.
+  and not before — DR-0021. The audience rule in its `cognito` mode is a copy of
+  the same kind, of API Gateway's behaviour rather than of its configuration —
+  DR-0022.
+- **`dev-gateway` and `dev-gateway-cognito` are complementary, not ranked.**
+  `Bearer alice` and `Bearer bob` are two callers only where the bearer value is
+  taken at its word, so the mode that verifies tokens cannot offer them: there is
+  nothing to verify a bare name against. Use `dev-gateway` for two callers and
+  for everything not about tokens, and `dev-gateway-cognito` for the question of
+  whether a token is one the deployed authorizer would accept — DR-0022.
+- **`cognito` mode's two values have no defaults**, which is the one place this
+  workspace departs from "an unset value means something workable". A defaulted
+  issuer would verify against the wrong pool and a defaulted audience would
+  accept what the deployment refuses; both look exactly like the misconfiguration
+  the mode exists to catch, so an unset one stops the process at startup —
+  DR-0022.
 - `just dynamo` must keep `-sharedDb`. Without it DynamoDB Local keeps a
   separate database per access key and region, so `dynamo-table` and
   `dev-api-dynamo` would create and query two different tables, both would

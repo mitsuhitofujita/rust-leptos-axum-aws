@@ -1,6 +1,7 @@
 # Verifying real Cognito tokens locally
 
-Status: in progress
+Status: in progress — built and checked without AWS; the four checks against a
+real pool remain, and the Design Document updates await confirmation
 Started: 2026-08-11
 Branch: main
 
@@ -91,20 +92,125 @@ Checking these before an apply is the whole return on this phase.
 
 ## Progress
 
-To be appended.
+**2026-08-11 — two dependency questions settled before writing anything.** The
+plan's step 2 says "fetch the JWKS", which needs HTTPS, and `crates/devgateway`
+had no TLS stack — DR-0021 records the absence of one as a property worth having.
+Two ways out were weighed: fetching in-process, or having the `just` recipe
+`curl` the document and pass it in.
+
+Reading `Cargo.lock` settled it. `hyper-rustls` 0.27, `rustls` 0.23 and
+`rustls-native-certs` are all already there beneath `aws-sdk-dynamodb`, and
+`/etc/ssl/certs/ca-certificates.crt` is in the image. The in-process fetch
+therefore costs nothing that DR-0021 was protecting, and the recipe-side
+alternative would have made `cognito` mode unusable except through `just`. Fetched
+in-process, at startup.
+
+The same reading settled the signature check. `aws-lc-rs` is `rustls` 0.23's
+backend and so is already compiled here, and its
+`RsaPublicKeyComponents { n, e }` takes the JWKS components in the exact form they
+arrive in — no ASN.1. `jsonwebtoken` would have added four packages and a second
+cryptographic backend, and its audience validation would have had to be switched
+off anyway, because API Gateway's rule is not its rule. Both confirmed with the
+requester before starting.
+
+**Fetching before the listener binds turned out to be the better shape**, not just
+the simpler one. It makes "cache for the process's lifetime" literal, it keeps
+`edge::decide` synchronous so nothing about `edge.rs` had to change beyond one
+argument, and it turns an unreachable pool into a startup failure with the reason
+on screen rather than a process that accepts connections and refuses every one of
+them for a cause nobody can see.
+
+**What was built.** `jwks.rs` (fetch, parse, verify-by-`kid`), `Mode::Cognito` and
+a `Verification` in `config.rs`, a `Verifier` and a `verified()` path in
+`authorizer.rs`, one extra argument through `edge::decide`, the eager fetch and
+the announcement in `main.rs`, and `just dev-gateway-cognito`. `local` and
+`passthrough` are untouched; `Local` and `Cognito` take the same path through
+`edge.rs` and differ only in the authorizer's verdict.
+
+**Two findings worth keeping.**
+
+`openssl genpkey -outform DER` writes PKCS#1, not PKCS#8, whatever the flag
+suggests, and `RsaKeyPair::from_pkcs8` rejects it with `InvalidEncoding`. The
+fixture needs a second pass through `openssl pkcs8 -topk8 -nocrypt`. The recipe in
+`testkey.rs` carries both commands and the reason.
+
+Declaring `aws-lc-rs` with its default features added exactly one package to
+`Cargo.lock`: `untrusted` 0.7.1, beside the 0.9 already present, pulled by
+`ring-io` and `ring-sig-verify`. Those two are a compatibility surface for code
+ported from `ring`, and nothing here is. With `default-features = false` the lock
+gains two dependency edges and no packages at all, which is what makes the claim
+in `workspace.md` literally true rather than nearly true. The only casualty is
+`public_key().modulus_len()`, and `public_modulus_len()` on the key pair is the
+same number.
+
+**`Bearer alice` cannot survive this mode**, which was not in the plan and is the
+one real cost. DR-0021's most useful affordance depends on the bearer value being
+taken at its word. Rather than special-casing it — which would have made the mode
+a liar about what it verifies — the two modes are documented as complementary,
+the startup announcement says so, and a test pins it.
+
+**A Decision Record was warranted after all.** The plan's step 6 left it open.
+DR-0021 decided that the edge is reproduced outside the service; it did not decide
+that real tokens are verified against the real pool, and the audience rule, the
+`Bearer alice` trade-off, and the rejected alternatives have no home in a Design
+Document. DR-0022.
 
 ## Verification
 
-To be recorded. The intended check is a real token from `just dev-web-auth`
-accepted in `cognito` mode with the subject reaching the service; the same token
-rejected after tampering with a byte of its signature; an expired token rejected;
-and a token from a different app client rejected.
+Everything that needs no AWS was run and passed.
+
+- `just fmt-check`, `just check`, `just lint`, `just test` — all green. 39 tests
+  in `crates/devgateway`, up from 26; the thirteen new ones cover a well-formed
+  access token, an id token, an `aud` array, a tampered signature, a swapped
+  subject, an expired token, another app client, another issuer, an unknown
+  `kid`, `alg: none`, `Bearer alice` refused, the same token that `cognito`
+  refuses being forwarded by `local`, and the whole `authorize` path end to end.
+  All sign with the committed fixture key, and all but the last check against a
+  fixed clock, so none of them touches the network or the date.
+- The two log lines, seen under `--nocapture`, read as intended:
+  `devgateway: 200 — verified access token for sub=abc-123, audience matched on
+  `client_id`` and `devgateway: 401 — the token expired … seconds ago.` The first
+  is the one that tells an access token from an id token, which is the diagnosis
+  this phase is for.
+- `DEVGATEWAY_MODE=cognito` with `DEVGATEWAY_ISSUER` unset exits 1 with
+  `... but DEVGATEWAY_ISSUER is unset. `just dev-gateway-cognito` resolves it
+  from SSM.` A misspelled mode is refused too, naming the three.
+- **The TLS leg works against a real AWS endpoint.** Pointed at
+  `https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_doesnotexist`,
+  the process exits 1 with `... /.well-known/jwks.json answered 404 Not Found` —
+  which is the far side answering over TLS, so the handshake, the native root
+  store and the HTTPS GET are all exercised without a pool and without
+  credentials.
+- **The default is untouched.** `devgateway` and `server` started together with
+  nothing set: the announcement is unchanged, `/api/action-types` without a token
+  is 401, with `Bearer alice` is 200, and `/health` is 200.
+- `Cargo.lock` gains two dependency edges under `devgateway` and no packages.
+
+Not yet run, because it needs AWS credentials and a real pool — the four checks
+this phase's plan named:
+
+- a real token from `just dev-web-auth` accepted, with the subject reaching the
+  service;
+- the same token refused after one byte of its signature is changed;
+- an expired token refused;
+- `DEVGATEWAY_AUDIENCE` set to something else refusing the same good token, which
+  is the deployed misconfiguration reproduced deliberately.
+
+The first three are pinned by the unit tests above against the fixture key; what
+the manual run adds is that the pool's real key set parses and that the real
+issuer and app client id resolve from SSM into a working configuration.
 
 ## Retirement
 
-- [ ] Design Documents updated — `deployment.md`, `workspace.md`
-- [ ] Decision Records written (DR-____), if the second phase's does not cover it
-- [ ] Non-obvious knowledge preserved — that the audience lives in `client_id`
-      for an access token and `aud` for an id token, and that this is the
-      distinction the deployed authorizer's configuration turns on
+- [x] Design Documents updated — `deployment.md`, `workspace.md`, and the
+      `index.md` record table (drafted; awaiting confirmation, per `docs/README.md`)
+- [x] Decision Records written — DR-0022. The second phase's did not cover it:
+      DR-0021 decided that the edge is reproduced outside the service, not that
+      real tokens are verified against the real pool
+- [x] Non-obvious knowledge preserved — the audience living in `client_id` for an
+      access token and `aud` for an id token is a `deployment.md` constraint and
+      DR-0022's Context; the `Bearer alice` trade-off, the `jsonwebtoken`
+      rejection and the eager fetch are DR-0022's Decision and Consequences; the
+      `openssl` PKCS#1/PKCS#8 trap and the `aws-lc-rs` default-features trap are
+      in `testkey.rs` and the root `Cargo.toml` beside the code they explain
 - [ ] No durable document depends on this log

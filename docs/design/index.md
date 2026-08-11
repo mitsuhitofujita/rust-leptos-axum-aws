@@ -61,3 +61,4 @@ Not yet written, because it does not exist yet:
 | [DR-0019](../decisions/DR-0019-the-icon-catalog-ships-lucide-geometry-not-lucide-components.md) | The icon catalog ships Lucide geometry, not `lucide-leptos` components |
 | [DR-0020](../decisions/DR-0020-local-verification-runs-against-dynamodb-local.md) | Local verification runs against DynamoDB Local, pinned in the development image |
 | [DR-0021](../decisions/DR-0021-the-deployed-edge-is-reproduced-outside-the-service.md) | The deployed edge is reproduced locally, outside the service |
+| [DR-0022](../decisions/DR-0022-real-cognito-tokens-are-verified-locally-by-the-stand-in.md) | Real Cognito tokens are verified locally, by the stand-in and not by the service |

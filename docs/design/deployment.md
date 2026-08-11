@@ -192,6 +192,16 @@ an apply rather than after one (DR-0021). It is a mirror of this configuration
 and not a second source of truth: it verifies nothing about AWS itself, and a
 change here has to be made there too.
 
+**The authorizer's configuration is checkable before an apply.** `just
+dev-gateway-cognito` runs that stand-in with the authorizer's verdict switched on:
+it resolves `issuer` and `audience` from the same two SSM parameters this layer
+reads them from, fetches the pool's keys from
+`{issuer}/.well-known/jwks.json`, and accepts or refuses a real token the way
+`aws_apigatewayv2_authorizer.cognito` would — DR-0022. A refusal answers exactly
+what the deployed authorizer answers and prints the reason on its own terminal,
+which is the distinction that does not exist in production, where every one of
+these faults is an indistinguishable 401.
+
 ### Deploying artefacts
 
 Terraform owns the bucket and the function; it does not own their contents
@@ -307,6 +317,16 @@ without running either.
   a 401 on every `/api` call, for the same reason the deployed one does: it sends
   no `Authorization` header. Reaching the API from a browser against the local rig
   means `just dev-web-auth` and a real token — DR-0021.
+
+- **The authorizer's `audience` is matched against `client_id` for an access
+  token and `aud` for an id token.** `jwt_configuration.audience` holds the app
+  client id, and which claim carries it depends on which token the SPA sent: a
+  Cognito **access** token carries it as `client_id`, an **id** token as `aud`.
+  API Gateway accepts either, so both are a working configuration and neither is
+  a way to tell them apart from the outside. `crates/app/src/api.rs` sends the
+  access token. This is the detail `just dev-gateway-cognito` exists to make
+  visible — it names which kind arrived and which claim satisfied the audience,
+  on every accepted request — DR-0022.
 
 - **One Cognito app client serves production and local development alike**, so
   its callback and logout URLs list the CloudFront domain *and*
