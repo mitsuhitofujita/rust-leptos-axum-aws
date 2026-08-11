@@ -68,7 +68,7 @@ against without a deployment — DR-0020.
 | `dev-web` | `trunk serve` — frontend on :8080, proxying `/api` to :3000 |
 | `dev-web-auth` | the same dev server with sign-in switched on; resolves the two Cognito values from SSM, so it needs AWS credentials |
 | `dev-api` | `cargo run -p server` — API on :3000, on the in-memory store |
-| `dynamo` | DynamoDB Local on :8000, in memory and `-sharedDb` |
+| `dynamo` | DynamoDB Local on :8000, in memory, `-sharedDb`, and reporting nothing to AWS |
 | `dynamo-stop` | stop it, for when Ctrl-C in its own terminal is not available |
 | `dynamo-table` | create the local table, idempotently; needs `dynamo` running |
 | `dev-api-dynamo` | the same API server pointed at `dynamo` instead of at its in-memory store |
@@ -115,6 +115,10 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
   and `netstat` are all absent, so anything that has to find a running process
   reads `/proc` directly, as `dynamo-stop` does. A shell may define `pkill` as a
   function, which makes it look present until it is run.
+- A recipe's comment is not free-form. `just --list` shows only the last comment
+  line before a recipe, so each carries its explanation, then a blank line, then
+  a one-line summary; an explanation without that break is listed as a fragment
+  ending mid-sentence.
 - Checking the workspace for the host target is not sufficient. `crates/app`
   must also be checked for `wasm32-unknown-unknown`; `just check` and `just
   lint` do both.

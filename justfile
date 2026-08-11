@@ -80,6 +80,9 @@ dynamo:
 # This is for the other cases: it was started in a terminal that has since gone,
 # or it is holding port 8000 and it is not obvious what is.
 #
+# There is no shutdown endpoint to ask instead: /shutdown answers 400 on 3.3.1
+# and -help lists no such option, so a signal is the only way.
+#
 # The process is found by reading /proc rather than with pkill, because procps is
 # not in the image — pkill, pgrep, ps, fuser and lsof are all absent, and only
 # coreutils and bash are relied on here. Both the command name and the jar path

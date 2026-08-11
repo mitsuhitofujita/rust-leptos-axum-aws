@@ -304,9 +304,8 @@ new flag, and says why nothing here reports to AWS.
 
 ## Retirement
 
-- [ ] Design Documents updated — `workspace.md`, `backend.md`, and
-      `persistence.md` and `index.md` besides. Drafted; awaiting confirmation,
-      which `docs/README.md` requires before an overwrite counts as done.
+- [x] Design Documents updated — `workspace.md`, `backend.md`, `persistence.md`
+      and `index.md`, confirmed on 2026-08-11 in the closing pass.
 - [x] Decision Records written — DR-0020, which records DynamoDB Local as the
       store local verification runs against and carries the correction to
       DR-0018's premise in its Context. DR-0018 itself is unedited.
@@ -318,7 +317,13 @@ new flag, and says why nothing here reports to AWS.
       `crates/server` untouched (DR-0020 Decision, `backend.md` Interfaces); and
       that the image has no process tools at all, with `pkill` possibly defined
       as a shell function over nothing (`workspace.md` Constraints, and the
-      `dynamo-stop` recipe comment).
+      `dynamo-stop` recipe comment); that DynamoDB Local has no shutdown endpoint
+      to ask instead of signalling it (the `dynamo-stop` comment); and that
+      `just --list` shows only a recipe's last comment line, which is why the
+      comments are shaped as they are (`workspace.md` Constraints).
+- [x] The bash-in-recipes question settled where it belongs — `CLAUDE.md` states
+      the exception to its own Rust rule, rather than each recipe explaining
+      itself. That rule was what made `dynamo-stop` look like a violation.
 - [x] No durable document depends on this log
 - [x] Verification completed after the container rebuild — every check in the
       section above is ticked, run against the rebuilt image on 2026-08-11.
