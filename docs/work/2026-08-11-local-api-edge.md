@@ -30,6 +30,15 @@ the edge.** The others are `2026-08-11-local-dynamodb.md`,
 — the stand-in works against either store — and the third extends what this one
 builds.
 
+### Clarifications
+
+The stand-in's port must not become a requirement of the ordinary development
+session. `Trunk.toml`'s `[[proxy]]` block is removed and each `just` recipe names
+the backend it wants instead, so `dev-web` and `dev-web-auth` keep proxying to
+the service on :3000 and a new recipe proxies to the stand-in on :3001. The cost
+— that a bare `trunk serve` run outside `just` no longer proxies `/api` — is
+accepted.
+
 ## Interpretation
 
 **What is being asked.** Everything between the browser and `crates/server` in a
@@ -105,9 +114,19 @@ property it exists to check.
    payload-2.0-shaped context, claims stringified, and attach it as
    `x-amzn-request-context`. `/health` gets a context with no `authorizer` member
    at all, which is the shape `identity.rs` already has a test for.
-6. **Ports.** The stand-in on 3001, the service unchanged on 3000, and
+6. ~~**Ports.** The stand-in on 3001, the service unchanged on 3000, and
    `Trunk.toml`'s proxy moved to 3001. `just dev-api` keeps working on its own,
-   so the no-stand-in path survives.
+   so the no-stand-in path survives.~~ — **superseded**, see 6a. Moving
+   `Trunk.toml`'s proxy would have left `just dev-web` unable to reach anything
+   without the stand-in running, which is the opposite of the assumption above
+   it. trunk 0.21.14 *appends* `--proxy-backend` to the `[[proxy]]` entries
+   rather than overriding them (`src/cmd/serve.rs:168` in that release), so
+   pointing the file at 3001 and overriding it per recipe is not available
+   either: two entries would both claim `/api`.
+6a. **Ports.** The stand-in on 3001, the service unchanged on 3000, and
+   `Trunk.toml`'s `[[proxy]]` block removed. `dev-web` and `dev-web-auth` pass
+   `--proxy-backend` for 3000, and a new `dev-web-gateway` passes it for 3001,
+   so the two-terminal default survives untouched.
 7. **`just dev-gateway`**, and a note in the recipe about which mode is which.
 8. **Tests in the crate**: the route table, the 404-not-405 distinction, the
    preflight answer, the inbound header being discarded, and the stringified
@@ -120,24 +139,95 @@ property it exists to check.
 
 ## Progress
 
-To be appended.
+### 2026-08-11
+
+**`crates/devgateway` written and working.** Six modules: `config` (the
+environment and every default), `edge` (the route table, the CORS answer, and one
+decision function), `authorizer` (the two modes), `context` (the payload-2.0
+request context, claims stringified) and `proxy` (the forwarding leg). 19 unit
+tests, all over a pure `edge::decide` rather than a router, so no socket and no
+upstream are involved.
+
+**The forwarding leg is `hyper-util`, and cost nothing.** It was already in
+`Cargo.lock` underneath axum, so declaring it added feature flags and no
+packages; the only new entry in the lock file is `devgateway` itself. Plain HTTP
+to loopback means no TLS and therefore no OpenSSL, which is what plan step 1 was
+guarding against. Phase three's JWKS fetch will need TLS, and `hyper-rustls` is
+already in the lock for it.
+
+**Step 6 was wrong and is superseded** — see the Clarifications above and step
+6a. The finding worth keeping: trunk *appends* a command-line `--proxy-backend`
+to `Trunk.toml`'s `[[proxy]]` entries rather than overriding them, so there is no
+way to state a default in the file and override it per recipe. Both entries would
+claim `/api`. The proxy target therefore lives in the recipes.
+
+**Plan step 5's fallback subject was wrong, and the verification caught it.** As
+planned, a bearer value that is not a JWT became a single configured subject
+(`DEVGATEWAY_SUBJECT`), which meant `Bearer alice` and `Bearer bob` were *the same
+caller* — the first run of the isolation check had both seeing both items. The
+fallback now takes the bearer value itself as the subject, and
+`DEVGATEWAY_SUBJECT` is gone. This is the difference between the rig being able to
+express two callers and not, and the isolation check is the main thing it exists
+for, so the flaw was worth the round trip. A real token that fails to decode lands
+here too and becomes a subject that is the whole token — ugly in the partition,
+which is the right kind of visible.
+
+**Two things about the stand-in are exact rather than approximate**, and both are
+recorded in DR-0021: the inbound `x-amzn-request-context` is discarded before
+anything else looks at the request, and claims are stringified the way payload
+format 2.0 stringifies them, including a list claim as `[a b]`.
+
+**Decided, and recorded as DR-0021:** the edge is reproduced outside the service.
+Alternatives weighed and rejected there: a mode inside `crates/server`, SAM or
+LocalStack, `cargo lambda watch`, and an axum router as the route table.
 
 ## Verification
 
-To be recorded. The intended checks: `cargo test -p devgateway`; a `DELETE` to
-`/api/action-types` answering 404 rather than reaching the service; a request
-with no `Authorization` answering 401; a request carrying a forged
-`x-amzn-request-context` and no token answering 401 rather than being attributed
-to the forged subject; and `just dev-web` still serving the SPA through the
-proxy.
+`just fmt-check`, `just check`, `just lint` and `cargo test -p devgateway` all
+pass — 19 tests.
+
+By hand, with `dev-api` and `dev-gateway` running:
+
+| Check | Result |
+| --- | --- |
+| `DELETE /api/action-types` | `404 {"message":"Not Found"}`; the service is never reached |
+| `GET /api/action-types` with no `Authorization` | `401 {"message":"Unauthorized"}` |
+| A forged `x-amzn-request-context` and no token | 401, not the forged subject |
+| A forged `x-amzn-request-context` *with* a token | forwarded with our context; the forgery is gone |
+| `GET /health` | `ok`, unauthenticated, context carrying no `authorizer` |
+| `OPTIONS` with the allowed origin | 204 with the four mirrored CORS headers, no token |
+| A forwarded response with an `Origin` | carries `access-control-allow-origin` |
+| `DEVGATEWAY_MODE=typo` | refused at startup rather than defaulted |
+
+**Isolation, which nothing local could observe before.** `Bearer alice` and
+`Bearer bob` each created an action type and each `GET` returned only its own.
+
+**A token with non-string claims, end to end.** A hand-built JWT carrying `exp` as
+a number, `email_verified` as a boolean and `cognito:groups` as a list reached the
+service and its subject decoded — the silent failure named in the Interpretation,
+now demonstrated not to occur through this path.
+
+**`passthrough` shows the contrast.** The same forged header reaches the service
+and wins, and `DELETE /api/action-types` gets a 405 from axum rather than a 404.
+That is what `just dev-api` alone already is.
+
+**The default path is undisturbed.** `just dev-web` with only `just dev-api`
+running serves the SPA on :8080 and its `/api` calls; trunk logs `proxying /api ->
+http://127.0.0.1:3000/api`. `just dev-web-gateway` logs `-> :3001`, serves the
+same SPA, answers 401 for an `/api` call with no token, and returns alice's items
+for one carrying `Bearer alice`.
 
 ## Retirement
 
-- [ ] Design Documents updated — `workspace.md`, `deployment.md`, `frontend.md`
-- [ ] Decision Records written (DR-____) — the edge is reproduced outside the
-      service, in a development-only crate
-- [ ] Non-obvious knowledge preserved — that a non-string claim silently
-      degrades to the development owner; that an unmatched route is a 404 and not
-      a 405; that discarding the inbound header is what keeps the rig honest
-      about DR-0017
-- [ ] No durable document depends on this log
+- [x] Design Documents updated — `workspace.md`, `deployment.md`, `frontend.md`,
+      and the record's row in `design/index.md`
+- [x] Decision Records written — DR-0021, the deployed edge is reproduced
+      locally, outside the service
+- [x] Non-obvious knowledge preserved, in DR-0021: that a non-string claim would
+      silently degrade to the development owner; that an unmatched route is a 404
+      and not the 405 a router would give; that discarding the inbound header is
+      what keeps the rig honest about DR-0017; and that trunk appends a
+      command-line proxy backend rather than overriding the file's, which is in
+      DR-0021's Consequences and in `workspace.md`'s constraints
+- [ ] No durable document depends on this log — to be confirmed with the Design
+      Document updates, which are drafted and awaiting review
