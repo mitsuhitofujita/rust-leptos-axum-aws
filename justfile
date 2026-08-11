@@ -175,7 +175,7 @@ dev-api-dynamo:
 # Three terminals when this is in use: dev-api, dev-gateway, dev-web-gateway.
 # Nothing about the two-terminal default changes if it never is.
 
-# Two modes, and the default is the interesting one.
+# Three modes, and the default is the one that needs nothing.
 #
 # `local` reproduces the edge: only GET and POST exist under /api and anything
 # else is a 404, OPTIONS is answered here, /api without an Authorization header
@@ -184,6 +184,9 @@ dev-api-dynamo:
 # doing. Any bearer value works: a JWT is decoded without being verified, and
 # anything else is taken as the subject itself, so `Bearer alice` and
 # `Bearer bob` are two callers and one cannot see the other's items.
+#
+# `cognito` (dev-gateway-cognito below) is `local` plus the authorizer's actual
+# verdict.
 #
 # `passthrough` (DEVGATEWAY_MODE=passthrough) reproduces nothing and discards
 # nothing. It is what `just dev-api` on its own already does, forged header and
@@ -198,7 +201,32 @@ dev-api-dynamo:
 dev-gateway:
     cargo run -p devgateway
 
-# Needs `dev-gateway` running as well as `dev-api`.
+# Everything `local` does, and the token is verified the way the deployed
+# authorizer verifies it: RS256 against the pool's published keys, then `iss`,
+# `exp`, and the app client id — which a Cognito access token carries in
+# `client_id` and an id token in `aud`. DR-0022.
+#
+# What it is for is infra/api/apigateway.tf, not the service. The two values
+# below are the authorizer's `jwt_configuration`, resolved from the same SSM
+# parameters the api layer reads them from, so a wrong one is visible here rather
+# than as a 401 after an apply. Set DEVGATEWAY_AUDIENCE by hand to something else
+# to watch a good token be refused.
+#
+# Needs AWS credentials for SSM and network for the JWKS, and neither afterwards.
+# The key set is fetched once before the listener binds; a pool that has rotated
+# its keys since means restarting this. `Bearer alice` does not work here.
+
+# The same stand-in, verifying real Cognito tokens. Needs AWS credentials.
+dev-gateway-cognito:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    DEVGATEWAY_MODE=cognito \
+    DEVGATEWAY_ISSUER="$(just _ssm identity/user_pool_issuer)" \
+    DEVGATEWAY_AUDIENCE="$(just _ssm identity/app_client_id)" \
+        cargo run -p devgateway
+
+# Needs `dev-gateway` or `dev-gateway-cognito` running as well as `dev-api`.
 
 # The dev server with /api going through the stand-in rather than to the service.
 dev-web-gateway:

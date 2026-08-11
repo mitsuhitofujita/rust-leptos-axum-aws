@@ -15,7 +15,7 @@ use axum::http::request::Parts;
 use axum::http::{Method, StatusCode};
 use axum::response::Response;
 
-use crate::authorizer::{self, Authorization};
+use crate::authorizer::{self, Authorization, Verifier};
 use crate::config::{Config, Mode};
 use crate::context;
 
@@ -44,11 +44,16 @@ pub enum Outcome {
 
 /// What happens to a request, and the changes it carries forward.
 ///
-/// `parts` is modified in place: in `Local` mode the adapter's headers are
-/// removed and the request context this process wrote is put on. That ordering
-/// is the point — the removal happens before anything else looks at the request,
-/// so there is no path on which a caller's copy survives.
-pub fn decide(config: &Config, parts: &mut Parts) -> Outcome {
+/// `parts` is modified in place: in `Local` and `Cognito` mode the adapter's
+/// headers are removed and the request context this process wrote is put on.
+/// That ordering is the point — the removal happens before anything else looks
+/// at the request, so there is no path on which a caller's copy survives.
+///
+/// `Local` and `Cognito` take the same path through everything below. The
+/// verifier is the single difference between them, and it changes only whether
+/// the authorizer accepts a token — not the route table, not the preflight, and
+/// not the shape of what the service receives.
+pub fn decide(config: &Config, verifier: Option<&Verifier>, parts: &mut Parts) -> Outcome {
     if config.mode == Mode::Passthrough {
         return Outcome::Forward(None);
     }
@@ -81,7 +86,7 @@ pub fn decide(config: &Config, parts: &mut Parts) -> Outcome {
             attach(parts, &context);
             Outcome::Forward(allow_origin)
         }
-        Route::Api => match authorizer::authorize(parts) {
+        Route::Api => match authorizer::authorize(parts, verifier) {
             Authorization::Refused => Outcome::Answer(answer(
                 StatusCode::UNAUTHORIZED,
                 "Unauthorized",
@@ -189,10 +194,12 @@ fn answer(status: StatusCode, message: &str, allow_origin: Option<HeaderValue>) 
 mod tests {
     use std::collections::HashMap;
 
+    use axum::body::to_bytes;
     use axum::http::Request;
     use serde_json::Value;
 
     use super::*;
+    use crate::config::Verification;
 
     struct Sent {
         parts: Parts,
@@ -227,8 +234,19 @@ mod tests {
 
     fn send(mode: Mode, request: Request<()>) -> Sent {
         let config = Config::for_test(mode);
+        // `Config::for_test` supplies the fixture's issuer and app client id in
+        // `Cognito` mode, so the verifier is built from the same fixture key set
+        // the authorizer's own tests sign against.
+        let verifier = config.verification.as_ref().map(|verification| Verifier {
+            verification: Verification {
+                issuer: verification.issuer.clone(),
+                audience: verification.audience.clone(),
+            },
+            keys: crate::jwks::Keys::parse(crate::testkey::JWKS.as_bytes()).unwrap(),
+        });
+
         let (mut parts, ()) = request.into_parts();
-        let outcome = decide(&config, &mut parts);
+        let outcome = decide(&config, verifier.as_ref(), &mut parts);
 
         Sent { parts, outcome }
     }
@@ -406,6 +424,63 @@ mod tests {
                 .headers()
                 .contains_key("access-control-allow-origin")
         );
+    }
+
+    /// The reason is a developer's, not a caller's. `cognito` mode knows exactly
+    /// why it refused and answers what the deployed authorizer answers, which is
+    /// a fixed body carrying none of it — DR-0022.
+    #[tokio::test]
+    async fn a_refusal_in_cognito_mode_says_no_more_than_the_deployed_one() {
+        let sent = send(
+            Mode::Cognito,
+            Request::get("/api/action-types")
+                .header("authorization", token("abc-123"))
+                .body(())
+                .unwrap(),
+        );
+
+        assert_eq!(sent.status(), StatusCode::UNAUTHORIZED);
+
+        let Outcome::Answer(response) = sent.outcome else {
+            unreachable!()
+        };
+        let body = to_bytes(response.into_body(), 1024).await.unwrap();
+
+        assert_eq!(body, r#"{"message":"Unauthorized"}"#);
+    }
+
+    /// The same unverifiable token `local` mode forwards. The two modes differ in
+    /// exactly one thing, and this is it.
+    #[test]
+    fn the_token_cognito_mode_refuses_is_the_one_local_mode_forwards() {
+        let request = || {
+            Request::get("/api/action-types")
+                .header("authorization", token("abc-123"))
+                .body(())
+                .unwrap()
+        };
+
+        assert!(send(Mode::Local, request()).forwarded());
+        assert_eq!(
+            send(Mode::Cognito, request()).status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    /// Everything ahead of the authorizer is shared, so a preflight is answered
+    /// in `cognito` mode too — and, as in `local` mode, without a token. This is
+    /// DR-0009's trap, which does not stop being a trap when tokens are verified.
+    #[test]
+    fn a_preflight_is_answered_in_cognito_mode_as_well() {
+        let sent = send(
+            Mode::Cognito,
+            Request::options("/api/action-types")
+                .header("origin", "http://localhost:8080")
+                .body(())
+                .unwrap(),
+        );
+
+        assert_eq!(sent.status(), StatusCode::NO_CONTENT);
     }
 
     /// `passthrough` is the absence of a mirror rather than a second one: it is

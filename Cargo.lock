@@ -917,8 +917,10 @@ dependencies = [
 name = "devgateway"
 version = "0.1.0"
 dependencies = [
+ "aws-lc-rs",
  "axum",
  "base64",
+ "hyper-rustls 0.27.9",
  "hyper-util",
  "serde",
  "serde_json",
