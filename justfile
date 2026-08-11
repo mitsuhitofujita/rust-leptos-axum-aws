@@ -63,12 +63,18 @@ dynamo_table := project + "-app"
 #
 # -inMemory means the table is gone when this stops, which is the lifetime the
 # in-memory store already has; dynamo-table is re-run after every restart.
+#
+# -disableTelemetry stops two things. Nothing is reported to AWS by a
+# verification step that exists to need no AWS at all; and without it DynamoDB
+# Local writes dynamodb-local-metadata.json — an installation id and a flag —
+# into the working directory, which is this repository. That file is in
+# .gitignore as well, because running the jar by hand still produces it.
 
 # DynamoDB Local on http://localhost:8000. Runs in the foreground, like dev-api.
 dynamo:
     java -Djava.library.path=/opt/dynamodb-local/DynamoDBLocal_lib \
         -jar /opt/dynamodb-local/DynamoDBLocal.jar \
-        -inMemory -sharedDb -port 8000
+        -inMemory -sharedDb -disableTelemetry -port 8000
 
 # Ctrl-C in the terminal running `just dynamo` is the ordinary way to stop it.
 # This is for the other cases: it was started in a terminal that has since gone,

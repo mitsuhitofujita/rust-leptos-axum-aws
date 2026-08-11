@@ -20,6 +20,8 @@
 # infra/bootstrap/backend.tf.example.
 /infra/bootstrap/backend.tf
 
-# just dynamo writes this beside the justfile — an installation id and a
-# telemetry flag, written even with -inMemory. Regenerated on every start.
+# DynamoDB Local writes this into the working directory — an installation id and
+# a telemetry flag, written even with -inMemory. `just dynamo` passes
+# -disableTelemetry and so produces no such file; this stays for the jar run by
+# hand without it.
 dynamodb-local-metadata.json

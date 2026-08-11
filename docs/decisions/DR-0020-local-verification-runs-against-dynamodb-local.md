@@ -35,11 +35,17 @@ verification runs the DynamoDB half of the service against.
 
 `.devcontainer/Dockerfile` installs `default-jre-headless` and unpacks a
 date-pinned archive, checked against AWS's published SHA-256, into
-`/opt/dynamodb-local`. Three `just` recipes are the interface: `dynamo` runs it
-in memory on port 8000 with `-sharedDb`, `dynamo-table` creates the table
-idempotently through the `aws` CLI already in the image, and `dev-api-dynamo`
-runs the ordinary `cargo run -p server` with `TABLE_NAME`,
+`/opt/dynamodb-local`. `just` recipes are the interface: `dynamo` runs it in
+memory on port 8000 with `-sharedDb` and `-disableTelemetry`, `dynamo-table`
+creates the table idempotently through the `aws` CLI already in the image, and
+`dev-api-dynamo` runs the ordinary `cargo run -p server` with `TABLE_NAME`,
 `AWS_ENDPOINT_URL_DYNAMODB`, a region and deliberately fake credentials.
+`dynamo-stop` is beside them for when Ctrl-C is not available; it reads `/proc`,
+because the image has no `ps`, `pkill` or `lsof`.
+
+Nothing here reports to AWS. A verification step whose point is that it needs no
+AWS account should not be telling one that it ran, which is what
+`-disableTelemetry` is for.
 
 `crates/server` is not changed, and this decision is conditional on that
 remaining true. `AWS_ENDPOINT_URL_DYNAMODB` is read by the SDK's generated

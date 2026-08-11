@@ -223,9 +223,8 @@ lines and the recipe beside it is already bash.
 Killing the JVM is enough — `just`'s own `sh -cu` wrapper exits with it, observed
 as exit 143 for the whole `just dynamo`.
 
-- [x] The `justfile` parses, the three recipes appear in `just --list` with
-      readable summaries, and `dynamo_table` evaluates to
-      `rust-leptos-axum-aws-app`.
+- [x] The `justfile` parses, the recipes appear in `just --list` with readable
+      summaries, and `dynamo_table` evaluates to `rust-leptos-axum-aws-app`.
 - [x] No file under `crates/` is modified.
 - [x] The `aws` CLI honours `AWS_ENDPOINT_URL_DYNAMODB`: with nothing listening,
       `describe-table` fails with `Could not connect to the endpoint URL:
@@ -274,6 +273,34 @@ After `Dev Containers: Rebuild Container`, in two terminals:
 - [x] A full round trip — `dynamo`, `dynamo-table`, `dynamo-stop` — leaves the
       port free, and `just --evaluate` and `just --list` still parse, the latter
       showing the recipe between `dynamo` and `dynamo-table`.
+
+### 2026-08-11 — the telemetry DynamoDB Local reports by default
+
+Reviewing the commits turned up `dynamodb-local-metadata.json` in the repository
+root, untracked: an installation id and `telemetryEnabled: true`, written into
+the working directory on every start. `-inMemory` does not cover it — that
+governs the database, not this file — and it had already reached a `git add -A`
+once.
+
+`-help` lists `-disableTelemetry`, and with it the file is not created at all.
+It is now in the `dynamo` recipe. The point is not the file: a verification mode
+whose whole claim is that it needs no AWS account should not be reporting to AWS
+that it ran.
+
+The `.gitignore` entry stays, because the jar run by hand without the flag still
+writes it — which is how this one appeared. Its comment now says that, rather
+than describing a recipe behaviour that is no longer the recipe's.
+
+DR-0020 was corrected in the same pass. Its Decision said "Three `just`
+recipes", which `dynamo-stop` had already made four — the same stale count that
+was fixed in the `justfile` in 3b4b2c4 — and it now names `dynamo-stop` and the
+new flag, and says why nothing here reports to AWS.
+
+- [x] With `-disableTelemetry` the file is not written: deleted, the jar started,
+      the port answered, and it did not reappear.
+- [x] `just dynamo` still starts and still announces `InMemory: true` and
+      `SharedDb: true`; `dynamo-table`, `dev-api-dynamo` and `dynamo-stop` still
+      work against it, and no metadata file is left behind.
 
 ## Retirement
 
