@@ -5,6 +5,10 @@ FROM rust:1.96-slim-trixie
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         curl \
+        # DynamoDB Local is a jar, and this is the only reason a Rust image has
+        # a JVM: nothing in the workspace compiles to it and no Java is written.
+        # See the pinned archive below and DR-0020.
+        default-jre-headless \
         git \
         jq \
         just \
@@ -28,6 +32,29 @@ RUN curl -fsSL -o /tmp/terraform.zip \
     unzip -q /tmp/terraform.zip terraform -d /usr/local/bin && \
     chmod +x /usr/local/bin/terraform && \
     rm /tmp/terraform.zip
+
+# DynamoDB Local is what local verification runs the DynamoDB half of
+# crates/server against, so that half is executed somewhere other than AWS
+# (DR-0020). AWS distributes it as a zip, like terraform above, so unzip covers
+# both and the headless JRE installed with the packages above runs it.
+#
+# The dated archive is used rather than dynamodb_local_latest.zip so the image is
+# reproducible, and the digest is the one AWS publishes beside it — a dated URL
+# alone is a name, the checksum is what makes it a pin. The v2.x path segment is
+# the distribution's and not the build's version; there is no v3.x.
+#
+# The host is AWS's own public download endpoint for DynamoDB Local, unrelated to
+# the CloudFront distribution infra/delivery creates: that one's domain is never
+# written down here, it is published to SSM and resolved at deploy time (DR-0005).
+# Nothing about this account is in this URL, and the checksum above is what makes
+# trusting the URL unnecessary in the first place.
+ARG DYNAMODB_LOCAL_VERSION=2026-07-31
+ARG DYNAMODB_LOCAL_SHA256=5b0d17dd3b4e929db64a9f624a3f96eaf0961e3cf4acece00091656aec5fc7ed
+RUN curl -fsSL -o /tmp/dynamodb-local.zip \
+        "https://d1ni2b6xgvw0s0.cloudfront.net/v2.x/dynamodb_local_${DYNAMODB_LOCAL_VERSION}.zip" && \
+    echo "${DYNAMODB_LOCAL_SHA256}  /tmp/dynamodb-local.zip" | sha256sum -c - && \
+    unzip -q /tmp/dynamodb-local.zip -d /opt/dynamodb-local && \
+    rm /tmp/dynamodb-local.zip
 
 ARG VSCODE_UID=1000
 ARG VSCODE_USER=vscode

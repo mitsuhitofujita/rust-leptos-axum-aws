@@ -38,6 +38,118 @@ dev-web-auth:
 dev-api:
     cargo run -p server
 
+# --- Local verification against DynamoDB -----------------------------------
+#
+# dev-api above runs the in-memory store, so the DynamoDB half of crates/server
+# is compiled by every build and executed by nothing until it is deployed
+# (DR-0018). These three recipes are how it is executed here instead: DynamoDB
+# Local, the table, and the same binary pointed at both.
+#
+# crates/server knows nothing about any of this. AWS_ENDPOINT_URL_DYNAMODB is
+# read by the SDK's generated config rather than by the service, and TABLE_NAME
+# is still what chooses the store — exactly as on the Lambda, which is what makes
+# this a verification of the deployed path rather than of a stand-in. DR-0020.
+
+# Kept in step with infra/ by hand, like `project` at the top of this file:
+# dynamo_region mirrors `variable "region"` and dynamo_table mirrors the table's
+# `"${var.project}-app"` in infra/data/main.tf.
+dynamo_endpoint := "http://localhost:8000"
+dynamo_region := "ap-northeast-1"
+dynamo_table := project + "-app"
+
+# -sharedDb is not optional. Without it DynamoDB Local keeps a separate database
+# per access key and region, so dynamo-table below and the server would create
+# and query two different tables and neither would ever say so.
+#
+# -inMemory means the table is gone when this stops, which is the lifetime the
+# in-memory store already has; dynamo-table is re-run after every restart.
+
+# DynamoDB Local on http://localhost:8000. Runs in the foreground, like dev-api.
+dynamo:
+    java -Djava.library.path=/opt/dynamodb-local/DynamoDBLocal_lib \
+        -jar /opt/dynamodb-local/DynamoDBLocal.jar \
+        -inMemory -sharedDb -port 8000
+
+# Ctrl-C in the terminal running `just dynamo` is the ordinary way to stop it.
+# This is for the other cases: it was started in a terminal that has since gone,
+# or it is holding port 8000 and it is not obvious what is.
+#
+# The process is found by reading /proc rather than with pkill, because procps is
+# not in the image — pkill, pgrep, ps, fuser and lsof are all absent, and only
+# coreutils and bash are relied on here. Both the command name and the jar path
+# are matched: the path alone also matches this recipe's own shell, whose command
+# line contains it, and killing that is how a first attempt at this went wrong.
+
+# Stop DynamoDB Local. Does nothing, successfully, if it is not running.
+dynamo-stop:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    found=""
+    for d in /proc/[0-9]*; do
+        read -r comm < "$d/comm" 2>/dev/null || continue
+        [ "$comm" = java ] || continue
+        tr '\0' '\n' < "$d/cmdline" 2>/dev/null |
+            grep -qxF /opt/dynamodb-local/DynamoDBLocal.jar || continue
+        kill "${d#/proc/}" && found="${d#/proc/}"
+    done
+
+    if [ -z "$found" ]; then
+        echo "DynamoDB Local is not running"
+        exit 0
+    fi
+
+    # The table went with it: -inMemory, so dynamo-table is re-run after the
+    # next start.
+    echo "stopped DynamoDB Local (pid $found)"
+
+# The key schema is a copy of infra/data/main.tf's, and both are copies of the
+# interface docs/design/persistence.md defines: pk the owner, sk the entity kind
+# and its ordering, nothing else declared. Billing mode is named because the API
+# requires one; DynamoDB Local bills nothing.
+
+# Create the local table, idempotently. Needs `just dynamo` running.
+dynamo-table:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export AWS_ENDPOINT_URL_DYNAMODB="{{dynamo_endpoint}}"
+    export AWS_REGION="{{dynamo_region}}"
+    export AWS_ACCESS_KEY_ID=local
+    export AWS_SECRET_ACCESS_KEY=local
+
+    if aws dynamodb describe-table --table-name "{{dynamo_table}}" >/dev/null 2>&1; then
+        echo "{{dynamo_table}} already exists"
+        exit 0
+    fi
+
+    aws dynamodb create-table \
+        --table-name "{{dynamo_table}}" \
+        --attribute-definitions \
+            AttributeName=pk,AttributeType=S \
+            AttributeName=sk,AttributeType=S \
+        --key-schema \
+            AttributeName=pk,KeyType=HASH \
+            AttributeName=sk,KeyType=RANGE \
+        --billing-mode PAY_PER_REQUEST \
+        --query 'TableDescription.TableName' --output text
+
+# The credentials are fake on purpose. DynamoDB Local checks nothing, and a
+# process that cannot authenticate anywhere cannot reach the real table by
+# accident — these override a real AWS session if one happens to be configured,
+# which is the point of setting them rather than leaving them out.
+
+# The API server on the DynamoDB store instead of the in-memory one.
+dev-api-dynamo:
+    TABLE_NAME="{{dynamo_table}}" \
+    AWS_ENDPOINT_URL_DYNAMODB="{{dynamo_endpoint}}" \
+    AWS_REGION="{{dynamo_region}}" \
+    AWS_ACCESS_KEY_ID=local \
+    AWS_SECRET_ACCESS_KEY=local \
+        cargo run -p server
+
+# ---------------------------------------------------------------------------
+
 # Build everything the way it would be shipped.
 build:
     cargo build --workspace --release
