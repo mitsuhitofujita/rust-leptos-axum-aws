@@ -19,3 +19,7 @@
 # bucket. backend.tf appears only after that migration — see
 # infra/bootstrap/backend.tf.example.
 /infra/bootstrap/backend.tf
+
+# just dynamo writes this beside the justfile — an installation id and a
+# telemetry flag, written even with -inMemory. Regenerated on every start.
+dynamodb-local-metadata.json
