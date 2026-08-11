@@ -1,6 +1,6 @@
 # Backend
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 ## Purpose
 
@@ -47,6 +47,13 @@ the deployed service and the development server differ by configuration rather
 than by code (DR-0018). An enum rather than a trait object because there are
 exactly two and the choice is settled before the first request.
 
+The DynamoDB variant is run locally by `just dev-api-dynamo`, against the
+DynamoDB Local pinned in the devcontainer image (DR-0020). That recipe sets
+`TABLE_NAME` and points the SDK at `http://localhost:8000` with fake
+credentials; the binary is the same one, taking the same branch it takes on the
+Lambda, which is what makes it a check of the deployed path rather than of
+something resembling it.
+
 Keys, attributes and queries are `persistence.md`'s, not this document's. What
 belongs here is that the identifier is minted by the service — a ULID, so it
 sorts by creation time and needs no coordination — and that what leaves the
@@ -86,7 +93,11 @@ a new path does not.
 `ulid`, `time` for one formatted instant, `serde` and `serde_json` for the
 request context, and `shared`.
 
-**Reads** `TABLE_NAME` from the environment, and nothing else.
+**Reads** `TABLE_NAME` from the environment, and nothing else. The SDK reads its
+own variables underneath — the region, the credentials, and the
+`AWS_ENDPOINT_URL_DYNAMODB` that `just dev-api-dynamo` redirects the client with.
+None of them is named in this crate, which is why running against a local
+DynamoDB cost it no code (DR-0020).
 
 ## Constraints
 
@@ -107,7 +118,9 @@ request context, and `shared`.
 - **The in-memory store is not a second design, and can still drift.** It
   answers from insertion order where DynamoDB answers a `Query` in key order,
   and those agree only because the key embeds a ULID. Anything that changes the
-  key encoding changes both — DR-0018.
+  key encoding changes both — DR-0018. `cargo test` reaches only the in-memory
+  half; the other one is checked by running `just dev-api-dynamo` by hand, which
+  nothing does automatically — DR-0020.
 - **`Scan` is not granted and no access pattern needs one.** Every query is
   inside one owner's partition — `persistence.md`.
 - **The dashboard is not connected to the store.** It answers from values in

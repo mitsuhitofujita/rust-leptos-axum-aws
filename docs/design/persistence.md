@@ -1,6 +1,6 @@
 # Persistence
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 Note: action types are stored. `crates/server` reads and writes the `TYPE#`
 half of this schema, and derives the partition key from the Cognito `sub` the
@@ -26,6 +26,11 @@ patterns and no others; `docs/design/page-layouts.md` is where they come from.
 `rust-leptos-axum-aws-app`, created by the `data` Terraform layer. On-demand
 billing, point-in-time recovery on, a primary key of `pk` and `sk`, and no
 secondary index.
+
+`just dynamo-table` creates a table of the same name and key schema in a local
+DynamoDB, for verifying the service against the store it is written for without
+deploying it (DR-0020). That copy of the schema and `infra/data/main.tf` are both
+copies of what this document defines, and are kept in step with it by hand.
 
 Only the two key attributes are declared to DynamoDB. Every other attribute
 belongs to the application, so adding one is not an infrastructure change.

@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -59,3 +59,4 @@ Not yet written, because it does not exist yet:
 | [DR-0017](../decisions/DR-0017-the-service-reads-its-caller-from-the-adapters-request-context.md) | The service reads its caller from the adapter's request context |
 | [DR-0018](../decisions/DR-0018-the-service-runs-without-aws.md) | The service runs without AWS, on an in-memory store and a development owner |
 | [DR-0019](../decisions/DR-0019-the-icon-catalog-ships-lucide-geometry-not-lucide-components.md) | The icon catalog ships Lucide geometry, not `lucide-leptos` components |
+| [DR-0020](../decisions/DR-0020-local-verification-runs-against-dynamodb-local.md) | Local verification runs against DynamoDB Local, pinned in the development image |

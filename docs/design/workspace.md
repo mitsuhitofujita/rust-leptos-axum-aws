@@ -1,6 +1,6 @@
 # Workspace
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 ## Purpose
 
@@ -55,13 +55,23 @@ installed: trunk downloads a CLI matching the resolved `wasm-bindgen` version
 into its own cache. Installing or pinning it by hand is what causes
 version-mismatch failures — DR-0003.
 
+**DynamoDB Local** is unpacked into `/opt/dynamodb-local` in the same image, from
+a date-pinned archive checked against AWS's published SHA-256, and the
+`default-jre-headless` package installed beside it is there to run that jar and
+for nothing else. It is what the DynamoDB half of `crates/server` is verified
+against without a deployment — DR-0020.
+
 **Tasks** (`just <recipe>`):
 
 | Recipe | What it does |
 | --- | --- |
 | `dev-web` | `trunk serve` — frontend on :8080, proxying `/api` to :3000 |
 | `dev-web-auth` | the same dev server with sign-in switched on; resolves the two Cognito values from SSM, so it needs AWS credentials |
-| `dev-api` | `cargo run -p server` — API on :3000 |
+| `dev-api` | `cargo run -p server` — API on :3000, on the in-memory store |
+| `dynamo` | DynamoDB Local on :8000, in memory and `-sharedDb` |
+| `dynamo-stop` | stop it, for when Ctrl-C in its own terminal is not available |
+| `dynamo-table` | create the local table, idempotently; needs `dynamo` running |
+| `dev-api-dynamo` | the same API server pointed at `dynamo` instead of at its in-memory store |
 | `build` | release build of the workspace and of the WASM bundle |
 | `check` | `cargo check` for the host, plus `app` for WASM |
 | `lint` | clippy for both targets, warnings denied |
@@ -74,6 +84,13 @@ Development needs `dev-api` and `dev-web` running together, in two terminals.
 Neither needs credentials or configuration: the API stores action types in
 memory when `TABLE_NAME` is unset, and the SPA disables sign-in when the two
 Cognito variables are (DR-0008, DR-0018).
+
+`dynamo`, `dynamo-table` and `dev-api-dynamo` are an opt-in verification mode
+beside that default rather than a replacement for it: they run the store the
+deployed function uses, on a machine with no AWS credentials, and nothing about
+a fresh clone changes if they are never used (DR-0020). The credentials those
+recipes pass are fake on purpose — a process that cannot authenticate anywhere
+cannot reach the real table by accident.
 
 The `justfile` also holds the `tf-*` recipes that apply the infrastructure and
 the `deploy-*` recipes that push the artefacts. Both sets belong to
@@ -90,6 +107,14 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
 - Nothing runs `just icons`. The generated files, the pinned `lucide-leptos`
   version and the category list in `crates/icongen` agree only because someone
   ran it after moving one of them — DR-0019.
+- `just dynamo` must keep `-sharedDb`. Without it DynamoDB Local keeps a
+  separate database per access key and region, so `dynamo-table` and
+  `dev-api-dynamo` would create and query two different tables, both would
+  succeed, and nothing would report it — DR-0020.
+- The image has no process tools. `ps`, `pgrep`, `pkill`, `fuser`, `lsof`, `ss`
+  and `netstat` are all absent, so anything that has to find a running process
+  reads `/proc` directly, as `dynamo-stop` does. A shell may define `pkill` as a
+  function, which makes it look present until it is run.
 - Checking the workspace for the host target is not sufficient. `crates/app`
   must also be checked for `wasm32-unknown-unknown`; `just check` and `just
   lint` do both.
