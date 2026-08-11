@@ -11,7 +11,10 @@ open = false
 # Unknown paths fall back to index.html, which is what makes a reload on
 # /dashboard work. The production host (S3 + CloudFront) needs the equivalent.
 
-# Development only: makes the SPA and the API look like one origin, so no CORS
-# is involved. Production serves them from separate origins — see DR-0001.
-[[proxy]]
-backend = "http://127.0.0.1:3000/api"
+# There is deliberately no [[proxy]] block. The `/api` proxy makes the SPA and
+# the API look like one origin so that no CORS is involved in development
+# (DR-0001), but there are now two things it can point at: the service on :3000
+# and the edge stand-in on :3001. Each `dev-web*` recipe in the justfile passes
+# its own --proxy-backend, so choosing one is choosing a recipe rather than
+# editing this file. trunk appends a CLI backend to the entries here rather than
+# overriding them, so a default here could not be overridden — DR-0021.

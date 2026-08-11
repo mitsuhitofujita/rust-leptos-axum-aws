@@ -33,6 +33,12 @@ web-sys = "0.3.103"
 axum = "0.8.9"
 tokio = "1.53.1"
 
+# The forwarding leg of crates/devgateway, and the hyper client underneath it.
+# Both are already in Cargo.lock as dependencies of axum, so declaring this adds
+# feature flags and no packages. Plain HTTP to loopback, so no TLS stack is
+# involved and the devcontainer image needs nothing new.
+hyper-util = "0.1.20"
+
 # The store. The SDK is the only way to reach DynamoDB, and `aws-config` is what
 # resolves credentials and region — in Lambda from the execution environment,
 # locally from whatever the developer has.

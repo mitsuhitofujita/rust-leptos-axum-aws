@@ -15,9 +15,16 @@ icons:
     cargo run -p icongen
     cargo fmt -p shared -p app
 
+# Where `trunk serve` sends /api. Trunk.toml holds no [[proxy]] block, because
+# there are two things it could point at and trunk appends a CLI backend to the
+# file's entries rather than overriding them — see DR-0021. So each recipe below
+# names the one it wants: the service directly, or the edge stand-in.
+api_backend := "http://127.0.0.1:3000/api"
+gateway_backend := "http://127.0.0.1:3001/api"
+
 # Frontend dev server on http://localhost:8080 (proxies /api to the API server).
 dev-web:
-    trunk serve
+    trunk serve --proxy-backend {{api_backend}}
 
 # Unset COGNITO_* variables mean no sign-in control and no Authorization header
 # (DR-0008), which is what `dev-web` above gets and what most development wants:
@@ -32,7 +39,7 @@ dev-web-auth:
 
     COGNITO_CLIENT_ID="$(just _ssm identity/app_client_id)" \
     COGNITO_HOSTED_UI_DOMAIN="$(just _ssm identity/hosted_ui_domain)" \
-        trunk serve
+        trunk serve --proxy-backend {{api_backend}}
 
 # API dev server on http://localhost:3000.
 dev-api:
@@ -156,6 +163,46 @@ dev-api-dynamo:
     AWS_ACCESS_KEY_ID=local \
     AWS_SECRET_ACCESS_KEY=local \
         cargo run -p server
+
+# --- Local verification against the deployed edge ---------------------------
+#
+# Between the browser and crates/server in a deployed request sit an API Gateway
+# HTTP API and the Lambda Web Adapter. Their route table, their preflight answer,
+# their 401, and the x-amzn-request-context header they put on every request are
+# decided in infra/api/apigateway.tf and are unobservable here. crates/devgateway
+# stands in for them, in front of the unmodified service — DR-0021.
+#
+# Three terminals when this is in use: dev-api, dev-gateway, dev-web-gateway.
+# Nothing about the two-terminal default changes if it never is.
+
+# Two modes, and the default is the interesting one.
+#
+# `local` reproduces the edge: only GET and POST exist under /api and anything
+# else is a 404, OPTIONS is answered here, /api without an Authorization header
+# is a 401, and the request context is written by this process — any copy the
+# caller sent is discarded first, which is what DR-0017 relies on API Gateway
+# doing. Any bearer value works: a JWT is decoded without being verified, and
+# anything else is taken as the subject itself, so `Bearer alice` and
+# `Bearer bob` are two callers and one cannot see the other's items.
+#
+# `passthrough` (DEVGATEWAY_MODE=passthrough) reproduces nothing and discards
+# nothing. It is what `just dev-api` on its own already does, forged header and
+# all, and it is here so the difference can be seen.
+#
+# A dev-web bundle sends no Authorization header at all (DR-0008), so behind this
+# every /api call is a 401 — which is deployment.md's constraint about a bundle
+# built without the Cognito variables, reproduced locally. Use dev-web-auth for a
+# browser session with a real token.
+
+# The API Gateway + Lambda Web Adapter stand-in on http://localhost:3001.
+dev-gateway:
+    cargo run -p devgateway
+
+# Needs `dev-gateway` running as well as `dev-api`.
+
+# The dev server with /api going through the stand-in rather than to the service.
+dev-web-gateway:
+    trunk serve --proxy-backend {{gateway_backend}}
 
 # ---------------------------------------------------------------------------
 
