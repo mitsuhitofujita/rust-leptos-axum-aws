@@ -244,6 +244,13 @@ current intended state — but the note matters, because a reader who opens
 `identity.rs` expecting `AuthContext` should find out why from the document
 rather than from the surprise.
 
+**The two-commit split was carried out**, resolving the correction above.
+`af4fab0` carried the cancellation entry into a tree; `70170a2` deleted the file.
+The entry above saying it was "left in place" stands as written, because it was
+true when written and the record of the wrong turn is the part worth keeping —
+the plan called for one commit, and one commit would have left the reasoning in
+no tree at all.
+
 ## Verification
 
 Nothing to verify by execution: this log's product is documents. It is checked by
@@ -282,11 +289,10 @@ the durable layer being consistent afterwards, and each of these was run.
       structurally rather than tested around (DR-0024 Context); the SAM boundary
       (DR-0023 Alternatives)
 - [ ] No durable document depends on this log
-- [ ] The fourth phase's log retired — its cancellation entry is committed in
-      `af4fab0`, so the reasoning is safely in a tree and the file can now be
-      deleted whenever wanted. Everything the deletion depends on holds: the
-      eight-property inventory is in DR-0023's Consequences, and nothing durable
-      cites the file. Left in place for now
+- [x] The fourth phase's log retired — cancelled and committed in `af4fab0`,
+      deleted in `70170a2`. Two commits rather than one, so its reasoning
+      reached a tree before the file left: the eight-property inventory is in
+      DR-0023's Consequences, and nothing durable cited the file
 - [ ] Follow-on work opened or explicitly deferred — introducing `AuthContext`
       across `crates/server` and the adapter, and reducing `crates/devgateway`.
       Both are decided here and neither is built; two Work Logs, and this one
