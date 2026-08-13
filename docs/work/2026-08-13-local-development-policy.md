@@ -230,6 +230,12 @@ first commit. Everything the deletion depends on is already done: the
 eight-property inventory is in DR-0023's Consequences, and nothing durable cites
 the file.
 
+**The Design Document updates were confirmed**, including the two judgements
+that were mine rather than the request's: folding `dev-gateway-cognito` into
+`dev-gateway`, since one mode leaves nothing for `DEVGATEWAY_MODE` or a second
+recipe name to distinguish, and carrying dated notes in `backend.md` and
+`workspace.md` where they describe a system ahead of the code.
+
 **Two Design Documents now describe a system slightly ahead of the code.**
 `backend.md` says the service reads an `AuthContext` and `workspace.md` says
 `crates/devgateway` is a thin adapter; neither is built. Both carry a dated note
@@ -262,7 +268,7 @@ the durable layer being consistent afterwards, and each of these was run.
 ## Retirement
 
 - [x] Design Documents updated — `backend.md`, `workspace.md`, `deployment.md`,
-      `frontend.md`, `index.md`. Drafted and applied; awaiting confirmation,
+      `frontend.md`, `index.md`. Drafted, applied, and confirmed on 2026-08-13,
       which `docs/README.md` requires before the work counts as complete
 - [x] Decision Records written — DR-0023 for the policy, DR-0024 for the
       `AuthContext` boundary; DR-0021 and DR-0017 Status lines updated
@@ -276,9 +282,11 @@ the durable layer being consistent afterwards, and each of these was run.
       structurally rather than tested around (DR-0024 Context); the SAM boundary
       (DR-0023 Alternatives)
 - [ ] No durable document depends on this log
-- [ ] The fourth phase's log retired — its cancellation entry is written and its
-      knowledge is in DR-0023, but the file cannot be deleted until that entry is
-      committed, or the reasoning survives only as a diff
+- [ ] The fourth phase's log retired — its cancellation entry is committed in
+      `af4fab0`, so the reasoning is safely in a tree and the file can now be
+      deleted whenever wanted. Everything the deletion depends on holds: the
+      eight-property inventory is in DR-0023's Consequences, and nothing durable
+      cites the file. Left in place for now
 - [ ] Follow-on work opened or explicitly deferred — introducing `AuthContext`
       across `crates/server` and the adapter, and reducing `crates/devgateway`.
       Both are decided here and neither is built; two Work Logs, and this one
