@@ -1,6 +1,6 @@
 # Deployment
 
-Updated: 2026-08-11
+Updated: 2026-08-13
 
 Note: all five layers have been applied and their twelve SSM parameters exist.
 The API is deployed and `GET /health` returns `ok`. The table is empty and
@@ -178,29 +178,35 @@ the layer.
 `{proxy+}` means a new *endpoint* under `/api` in `crates/server` needs no change
 to the infrastructure. A new *method* does: it goes in `local.api_methods` in
 `infra/api/apigateway.tf`, which both this route set and the CORS
-`allow_methods` list derive from — and, since DR-0021, `crates/devgateway`'s
-route table as well. The methods are enumerated rather than covered by a single
+`allow_methods` list derive from, and which is the only place it lives — DR-0023
+removed the second copy. The methods are enumerated rather than covered by a single
 `ANY` route so that the HTTP API answers CORS preflight itself — DR-0009, and the
 CORS constraint below.
 
-**The edge is reproduced locally.** Everything this section describes between the
-browser and the service — the route table, the preflight answered ahead of the
-authorizer, the 401 for a request with no token, and the `x-amzn-request-context`
-header the adapter forwards — exists in `crates/devgateway` as well, in front of
-the unmodified binary, so that an assumption about the edge can be checked before
-an apply rather than after one (DR-0021). It is a mirror of this configuration
-and not a second source of truth: it verifies nothing about AWS itself, and a
-change here has to be made there too.
+**The edge is verified here, not locally.** Everything this section describes
+between the browser and the service — the route table, the preflight answered
+ahead of the authorizer, the 401 for a request with no token, and the
+`x-amzn-request-context` header the adapter forwards — is checked by exercising
+the deployed API, because it is behaviour AWS defines. It was reproduced locally
+for a time, under DR-0021, and that was retracted: a local mirror of this section
+is a second telling of AWS's specification, maintained by hand, which drifts
+silently and can never be authoritative about the thing it imitates (DR-0023). So
+a fault in the route set or the preflight surfaces after an apply rather than
+before one, and `just tf-validate` is as far as anything can be checked in
+advance.
 
-**The authorizer's configuration is checkable before an apply.** `just
-dev-gateway-cognito` runs that stand-in with the authorizer's verdict switched on:
-it resolves `issuer` and `audience` from the same two SSM parameters this layer
-reads them from, fetches the pool's keys from
+**The authorizer's configuration is the exception, and is checkable before an
+apply.** `just dev-gateway` runs a thin adapter with the authorizer's verdict
+switched on: it resolves `issuer` and `audience` from the same two SSM parameters
+this layer reads them from, fetches the pool's keys from
 `{issuer}/.well-known/jwks.json`, and accepts or refuses a real token the way
 `aws_apigatewayv2_authorizer.cognito` would — DR-0022. A refusal answers exactly
 what the deployed authorizer answers and prints the reason on its own terminal,
 which is the distinction that does not exist in production, where every one of
-these faults is an indistinguishable 401.
+these faults is an indistinguishable 401. This one is worth keeping where the
+rest was not: `jwt_configuration` is four lines this repository owns, its faults
+are otherwise indistinguishable from a broken sign-in, and the check uses the
+real pool's real keys rather than a description of them — DR-0023.
 
 ### Deploying artefacts
 
@@ -312,11 +318,12 @@ without running either.
   which would have made the SPA single-origin and removed CORS entirely —
   DR-0008.
 
-- **A bundle built without the two Cognito variables is refused by the edge, and
-  that is now visible locally.** Behind `just dev-gateway` a `dev-web` bundle gets
-  a 401 on every `/api` call, for the same reason the deployed one does: it sends
-  no `Authorization` header. Reaching the API from a browser against the local rig
-  means `just dev-web-auth` and a real token — DR-0021.
+- **Reaching the API from a browser through `just dev-gateway` means
+  `dev-web-auth`.** The adapter verifies a real token, and a `dev-web` bundle
+  built without the two Cognito variables sends no `Authorization` header at all,
+  so every `/api` call is a 401. That is the deployment constraint below,
+  appearing locally as a consequence of what the adapter does rather than as
+  something arranged — DR-0022.
 
 - **The authorizer's `audience` is matched against `client_id` for an access
   token and `aud` for an id token.** `jwt_configuration.audience` holds the app
@@ -324,9 +331,9 @@ without running either.
   Cognito **access** token carries it as `client_id`, an **id** token as `aud`.
   API Gateway accepts either, so both are a working configuration and neither is
   a way to tell them apart from the outside. `crates/app/src/api.rs` sends the
-  access token. This is the detail `just dev-gateway-cognito` exists to make
-  visible — it names which kind arrived and which claim satisfied the audience,
-  on every accepted request — DR-0022.
+  access token. This is the detail `just dev-gateway` exists to make visible — it
+  names which kind arrived and which claim satisfied the audience, on every
+  accepted request — DR-0022.
 
 - **One Cognito app client serves production and local development alike**, so
   its callback and logout URLs list the CloudFront domain *and*

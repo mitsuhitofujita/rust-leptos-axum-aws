@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-11
+Updated: 2026-08-13
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -56,9 +56,11 @@ Not yet written, because it does not exist yet:
 | [DR-0014](../decisions/DR-0014-action-type-icons-use-lucide-names-and-svgs.md) | Action type icons use Lucide canonical names and locally rendered SVGs |
 | [DR-0015](../decisions/DR-0015-one-dynamodb-table-keyed-by-owner-and-entity-kind.md) | One DynamoDB table holds every entity, keyed by owner and entity kind |
 | [DR-0016](../decisions/DR-0016-records-copy-their-action-types-display-attributes.md) | An action record copies its action type's display attributes |
-| [DR-0017](../decisions/DR-0017-the-service-reads-its-caller-from-the-adapters-request-context.md) | The service reads its caller from the adapter's request context |
+| [DR-0017](../decisions/DR-0017-the-service-reads-its-caller-from-the-adapters-request-context.md) | The service reads its caller from the adapter's request context — superseded by DR-0024 |
 | [DR-0018](../decisions/DR-0018-the-service-runs-without-aws.md) | The service runs without AWS, on an in-memory store and a development owner |
 | [DR-0019](../decisions/DR-0019-the-icon-catalog-ships-lucide-geometry-not-lucide-components.md) | The icon catalog ships Lucide geometry, not `lucide-leptos` components |
 | [DR-0020](../decisions/DR-0020-local-verification-runs-against-dynamodb-local.md) | Local verification runs against DynamoDB Local, pinned in the development image |
-| [DR-0021](../decisions/DR-0021-the-deployed-edge-is-reproduced-outside-the-service.md) | The deployed edge is reproduced locally, outside the service |
+| [DR-0021](../decisions/DR-0021-the-deployed-edge-is-reproduced-outside-the-service.md) | The deployed edge is reproduced locally, outside the service — superseded by DR-0023 |
 | [DR-0022](../decisions/DR-0022-real-cognito-tokens-are-verified-locally-by-the-stand-in.md) | Real Cognito tokens are verified locally, by the stand-in and not by the service |
+| [DR-0023](../decisions/DR-0023-aws-behaviour-is-not-reimplemented-locally.md) | AWS behaviour is not re-implemented locally |
+| [DR-0024](../decisions/DR-0024-the-service-reads-an-authcontext.md) | The service reads an `AuthContext`, not AWS's request context |

@@ -1,6 +1,6 @@
 # DR-0017: The service reads its caller from the adapter's request context
 
-Status: accepted
+Status: superseded by DR-0024
 Date: 2026-08-10
 
 ## Context

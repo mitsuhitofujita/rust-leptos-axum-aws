@@ -1,6 +1,6 @@
 # DR-0021: The deployed edge is reproduced locally, outside the service
 
-Status: accepted
+Status: superseded by DR-0023
 Date: 2026-08-11
 
 ## Context

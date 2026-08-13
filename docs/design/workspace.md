@@ -1,6 +1,11 @@
 # Workspace
 
-Updated: 2026-08-11
+Updated: 2026-08-13
+
+Note: `crates/devgateway`'s reduction to the thin adapter below is decided
+(DR-0023) and not yet carried out. The crate still holds the `local` and
+`passthrough` modes, the route table and the context builder that DR-0021 gave
+it. This document states the intended design.
 
 ## Purpose
 
@@ -39,22 +44,29 @@ dependency, `lucide-leptos`, has no feature enabled and compiles to an empty
 library, and is declared only so that `Cargo.lock` pins the version and cargo
 unpacks the source it reads (DR-0019).
 
-`crates/devgateway` is the second of that kind. It is an axum binary that plays
-API Gateway and the Lambda Web Adapter in front of the unmodified service, so
-that the route table, the preflight answer, the 401, the
-`x-amzn-request-context` header (DR-0021) and the JWT authorizer's verdict
-(DR-0022) can be exercised without a deployment. It depends on nothing in the
-workspace — least of all on `crates/server`, which is the point — and nothing
-depends on it.
+`crates/devgateway` is the second of that kind, and it does one thing: it
+verifies a real Cognito token the way the deployed authorizer verifies it, and
+converts it into the `AuthContext` the service reads (DR-0022, DR-0024). It sits
+in front of the unmodified service, forwarding what it accepts and refusing what
+it does not.
+
+It is deliberately not a local API Gateway. It has no route table, answers no
+preflight, and does not reproduce the edge's behaviour in any other respect —
+that fidelity was tried, under DR-0021, and retracted as the wrong cost to carry
+against a specification AWS holds and can change (DR-0023). What survives from
+that decision is where the crate lives: **outside `crates/server`**, because in
+the deployment the component it stands in for is outside the service. It depends
+on nothing in the workspace — least of all on `crates/server`, which is the
+point — and nothing depends on it.
 
 Its three third-party dependencies beyond what the service already uses are
 `hyper-util` for the forwarding leg, and `hyper-rustls` and `aws-lc-rs` for the
-JWKS fetch and the signature check in `cognito` mode. All three were already in
-`Cargo.lock` — the first underneath axum, the other two underneath
-`aws-sdk-dynamodb` — so declaring them adds dependency edges and no packages, and
-the devcontainer image needs nothing new. `aws-lc-rs` is declared without default
-features, because `ring-io` and `ring-sig-verify` are a compatibility surface for
-code ported from `ring` and would have been the one thing to add a package.
+JWKS fetch and the signature check. All three were already in `Cargo.lock` — the
+first underneath axum, the other two underneath `aws-sdk-dynamodb` — so declaring
+them adds dependency edges and no packages, and the devcontainer image needs
+nothing new. `aws-lc-rs` is declared without default features, because `ring-io`
+and `ring-sig-verify` are a compatibility surface for code ported from `ring` and
+would have been the one thing to add a package.
 
 Third-party versions are declared once, in `[workspace.dependencies]` in the
 root `Cargo.toml`. Member crates use `dep.workspace = true` and add only the
@@ -86,9 +98,8 @@ against without a deployment — DR-0020.
 | `dev-web` | `trunk serve` — frontend on :8080, proxying `/api` to :3000 |
 | `dev-web-auth` | the same dev server with sign-in switched on; resolves the two Cognito values from SSM, so it needs AWS credentials |
 | `dev-web-gateway` | the same dev server with `/api` proxied to :3001 instead, so it goes through `dev-gateway` |
-| `dev-api` | `cargo run -p server` — API on :3000, on the in-memory store |
-| `dev-gateway` | `cargo run -p devgateway` — the edge stand-in on :3001, forwarding to :3000 |
-| `dev-gateway-cognito` | the same stand-in verifying real tokens against the pool; resolves the issuer and app client id from SSM, so it needs AWS credentials |
+| `dev-api` | `cargo run -p server` — API on :3000, on the in-memory store, on mock authentication |
+| `dev-gateway` | `cargo run -p devgateway` — the token adapter on :3001, forwarding to :3000; resolves the issuer and app client id from SSM, so it needs AWS credentials |
 | `dynamo` | DynamoDB Local on :8000, in memory, `-sharedDb`, and reporting nothing to AWS |
 | `dynamo-stop` | stop it, for when Ctrl-C in its own terminal is not available |
 | `dynamo-table` | create the local table, idempotently; needs `dynamo` running |
@@ -113,24 +124,26 @@ a fresh clone changes if they are never used (DR-0020). The credentials those
 recipes pass are fake on purpose — a process that cannot authenticate anywhere
 cannot reach the real table by accident.
 
-`dev-gateway` and `dev-web-gateway` are the second such mode, and reproduce the
-other half of what a deployment adds: `dev-gateway` sits between the two and
-plays API Gateway and the Lambda Web Adapter, so `/api` needs an `Authorization`
-header, a method outside the route table is a 404, `OPTIONS` is answered without
-a token, and the request context arrives as the header the service reads
-(DR-0021). Any bearer value works — a JWT is decoded without being verified, and
-anything else is taken as the subject itself, so `Bearer alice` and `Bearer bob`
-are two callers whose partitions can be compared. `DEVGATEWAY_MODE=passthrough`
-turns all of it off, which is what `just dev-api` alone already is. Three
-terminals when this is in use, and two when it is not.
+`dev-gateway` and `dev-web-gateway` are the second such mode, and they answer one
+question: would the deployed authorizer accept this token? `dev-gateway` sits
+between the two and verifies a real Cognito token against the pool's published
+keys and against the `issuer` and `audience` in `infra/api/apigateway.tf`, so a
+wrong one is visible before an apply rather than as a 401 after it (DR-0022). It
+is the one recipe here that needs AWS credentials and the network. Three
+terminals when it is in use, and two when it is not.
 
-`dev-gateway-cognito` is the same stand-in with the authorizer's actual verdict
-switched on: the token is verified against the pool's published keys and against
-the `issuer` and `audience` in `infra/api/apigateway.tf`, so a wrong one is
-visible before an apply rather than as a 401 after it (DR-0022). It is the one
-recipe here that needs AWS credentials and the network, and it is the exchange
-for `Bearer alice`, which cannot survive verification — see the constraint below.
-Everything else about the two is identical, `dev-web-gateway` included.
+It answers nothing else. The route table, the preflight, the 404 for an unrouted
+method — everything a deployment adds between the browser and the service beyond
+the authorizer's verdict — is verified against real AWS instead, because
+reproducing it locally means maintaining a second telling of AWS's specification
+in this repository (DR-0023).
+
+**Two callers are a property of `dev-api`, not of the adapter.** Mock
+authentication takes a subject, so `just dev-api` can be one caller or another
+without a token, an adapter or AWS credentials, and the isolation
+`identity::Owner` provides stays checkable on a machine with none of them
+(DR-0024). An unnamed subject is the constant development owner, which is what
+keeps a fresh clone working with no configuration at all (DR-0018).
 
 The `/api` proxy target lives in these recipes rather than in `Trunk.toml`,
 because there are two things it can point at — see the constraint below.
@@ -155,26 +168,24 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
   *appends* a command-line backend to the file's entries rather than overriding
   them, so a default in the file could not be overridden and two entries would
   both claim `/api`. The cost is that a bare `trunk serve` outside `just` no
-  longer proxies — DR-0021.
-- **`crates/devgateway`'s route table is a hand-maintained copy of
-  `local.api_methods`** in `infra/api/apigateway.tf`, as `dynamo_table` and
-  `project` are copies of Terraform values. A method added there has a second
-  place to follow it, and a drift shows up the first time the stand-in is used
-  and not before — DR-0021. The audience rule in its `cognito` mode is a copy of
-  the same kind, of API Gateway's behaviour rather than of its configuration —
-  DR-0022.
-- **`dev-gateway` and `dev-gateway-cognito` are complementary, not ranked.**
-  `Bearer alice` and `Bearer bob` are two callers only where the bearer value is
-  taken at its word, so the mode that verifies tokens cannot offer them: there is
-  nothing to verify a bare name against. Use `dev-gateway` for two callers and
-  for everything not about tokens, and `dev-gateway-cognito` for the question of
-  whether a token is one the deployed authorizer would accept — DR-0022.
-- **`cognito` mode's two values have no defaults**, which is the one place this
+  longer proxies — DR-0023.
+- **`crates/devgateway`'s audience rule is a hand-maintained copy of API
+  Gateway's behaviour**, not of its configuration: the app client id is matched
+  against `client_id` or `aud` because that is what a JWT authorizer does, and
+  nothing here would notice AWS changing it — DR-0022. It is the one such copy
+  the workspace keeps, and DR-0023 names it as a deliberate exception rather than
+  a precedent, because what it guards is a `jwt_configuration` fault this
+  repository owns.
+- **`dev-gateway`'s two values have no defaults**, which is the one place this
   workspace departs from "an unset value means something workable". A defaulted
   issuer would verify against the wrong pool and a defaulted audience would
   accept what the deployment refuses; both look exactly like the misconfiguration
-  the mode exists to catch, so an unset one stops the process at startup —
+  the adapter exists to catch, so an unset one stops the process at startup —
   DR-0022.
+- **`dev-gateway` cannot be two callers.** It verifies tokens, and there is
+  nothing to verify a bare name against, so comparing two partitions is
+  `dev-api`'s mock authentication rather than anything the adapter offers —
+  DR-0024.
 - `just dynamo` must keep `-sharedDb`. Without it DynamoDB Local keeps a
   separate database per access key and region, so `dynamo-table` and
   `dev-api-dynamo` would create and query two different tables, both would

@@ -202,7 +202,7 @@ dependency of `crates/icongen` alone (DR-0019).
   DR-0001. Which backend it proxies to is chosen by the recipe rather than by
   `Trunk.toml`, which holds no `[[proxy]]` block: `dev-web` and `dev-web-auth`
   pass `127.0.0.1:3000`, the service itself, and `dev-web-gateway` passes
-  `127.0.0.1:3001`, the edge stand-in in front of it — DR-0021. A bare
+  `127.0.0.1:3001`, the token adapter in front of it — DR-0023. A bare
   `trunk serve` outside `just` therefore proxies nothing.
 - Every request under `/api` needs a Cognito access token in an `Authorization`
   header, which `auth.rs` obtains from the hosted UI and `api.rs` attaches — but

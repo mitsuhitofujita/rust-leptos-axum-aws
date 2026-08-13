@@ -1,7 +1,8 @@
 # End-to-end verification against the local rig
 
-Status: in progress
+Status: cancelled — see DR-0023
 Started: 2026-08-11
+Cancelled: 2026-08-13
 Branch: main
 
 ## Request
@@ -92,18 +93,46 @@ and most are drawn from the consequences the durable layer already admits to:
 
 ## Progress
 
-To be appended.
+### 2026-08-13 — cancelled
+
+Nothing was built. `crates/e2e` does not exist and no test was written.
+
+This phase is cancelled by DR-0023, which decides that AWS behaviour is not
+re-implemented locally. The plan above is built on `crates/devgateway`'s `local`
+mode — step 1 spawns it as one of the three processes — and that mode is being
+deleted. Four of the eight properties in the Interpretation table are properties
+of the stand-in's reproduction of API Gateway rather than of this system, so
+asserting them would have pinned the fidelity of a copy that DR-0023 retracts.
+
+Cancelling is not the same as deciding the properties do not matter. They are
+split, and the split is recorded in DR-0023's Consequences: the store and owner
+properties stay locally checkable, the edge properties move to real AWS, and the
+non-string-claim degradation is removed structurally by DR-0024 rather than
+tested around.
+
+**The part worth keeping was the table, not the plan.** The Interpretation
+section above was the only written inventory of what a deployment adds that a
+developer's machine does not. It has been copied into DR-0023 with a column
+saying where each property is checked now, which is why this log can be deleted.
+
+The reasoning behind step 3 — skip rather than fail when the JRE is absent, so a
+fresh clone reports why instead of producing a stack trace — is worth reaching
+for again if a local test harness is ever built for the DynamoDB half alone.
+That is the one piece here with a future, and it is small enough to re-derive.
 
 ## Verification
 
-To be recorded. `just test-e2e` passing from a clean `target/`, and passing again
-while a `just dev-api` session is running, which is what the port choice is for.
+Not run. Nothing was built to verify.
 
 ## Retirement
 
-- [ ] Design Documents updated — `workspace.md`, `backend.md`
-- [ ] Decision Records written (DR-____), if any is warranted
-- [ ] Non-obvious knowledge preserved — that these tests exist to pin
-      consequences the durable layer already admits to, so a failure is a
-      regression in a documented property rather than in an arbitrary detail
-- [ ] No durable document depends on this log
+- [x] Design Documents updated — none needed. The drafts this log planned for
+      `workspace.md` and `backend.md` described a crate that was never written
+- [x] Decision Records written — DR-0023 cancels this phase and carries its
+      property inventory; DR-0024 removes the seventh property's failure mode
+- [x] Non-obvious knowledge preserved — the eight-property table is in DR-0023's
+      Consequences with its split recorded
+- [x] No durable document depends on this log — `docs/design/` and
+      `docs/decisions/` were searched for this file's name and it does not
+      appear. `2026-08-11-local-token-verification.md` cites it, but only in its
+      Request section, which records what was asked and is not rewritten

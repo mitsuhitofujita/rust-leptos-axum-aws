@@ -1,6 +1,11 @@
 # Backend
 
-Updated: 2026-08-11
+Updated: 2026-08-13
+
+Note: the `AuthContext` boundary below is decided (DR-0024) and not yet built.
+`src/identity.rs` still parses `x-amzn-request-context` itself, in the shape
+DR-0017 described. This document states the intended design; the Work Log
+carrying out the change is the place to look for how far it has got.
 
 ## Purpose
 
@@ -28,17 +33,32 @@ cannot change while it runs.
 **Identity.** `identity::Owner` is an axum extractor, and it is the whole of
 user isolation. A handler asks for the owner and cannot ask for anything else:
 no path, query or body parameter names one, which is what stops a handler from
-serving a partition its caller does not own. The value is the Cognito `sub`,
-read out of the `x-amzn-request-context` header the Lambda Web Adapter forwards
-the API Gateway request context in (DR-0017).
+serving a partition its caller does not own. The value is the Cognito `sub`.
+
+It reads that subject from an `AuthContext` — the service's own description of
+who is calling — and from nothing else. Nothing in this crate names API Gateway,
+a request context, a JWT or a claim. Whatever speaks AWS's dialect converts it
+into an `AuthContext` first, in front of the service, because in the deployment
+that component is in front of the service (DR-0024).
 
 The service never validates a token, holds no JWT library, and has no public
 keys. API Gateway's JWT authorizer has already run and is the only enforcement
 point there is (DR-0010).
 
-A request without that header is attributed to a constant development owner,
-because there is no adapter and no authorizer in front of `just dev-api`
-(DR-0018).
+Three cases, and the difference between the last two is the point:
+
+| What arrives | Who the owner is |
+| --- | --- |
+| A readable `AuthContext` | Its subject |
+| No `AuthContext` at all | A constant development owner, or the subject the developer named — DR-0018, DR-0024 |
+| An `AuthContext` that cannot be read | Nobody. The request is refused |
+
+Absent means development: nothing in front asserted anything, so there is
+nothing to misread, and that is what makes `just dev-api` a working application
+with no configuration. Malformed means something in front *did* assert an
+identity and the service failed to understand it — treating that as "nobody said
+anything" is how a write reaches the wrong partition silently, so it fails closed
+(DR-0024).
 
 **The store.** `store::Store` is an enum with two variants, chosen from the
 environment at startup: `TABLE_NAME` set selects DynamoDB, unset selects an
@@ -91,7 +111,7 @@ a new path does not.
 
 **Depends on** `axum` and `tokio`, `aws-config` and `aws-sdk-dynamodb`,
 `ulid`, `time` for one formatted instant, `serde` and `serde_json` for the
-request context, and `shared`.
+`AuthContext` and the request and response bodies, and `shared`.
 
 **Reads** `TABLE_NAME` from the environment, and nothing else. The SDK reads its
 own variables underneath — the region, the credentials, and the
@@ -101,17 +121,20 @@ DynamoDB cost it no code (DR-0020).
 
 ## Constraints
 
-- **The owner comes from the request context and from nowhere else.** The IAM
+- **The owner comes from the `AuthContext` and from nowhere else.** The IAM
   policy cannot express user isolation — the function serves every user, so its
   permissions cover every partition — so a handler that took an owner from a
-  request parameter would defeat it entirely — DR-0010, DR-0017.
-- **The `x-amzn-request-context` header is not a security boundary.** Anyone who
-  could reach the service directly could forge it; nothing can, because API
-  Gateway is the only route to the function and overwrites it on every request.
-  Exposing the service by any other path invalidates this — DR-0017.
-- **A missing header means development, not rejection.** In a deployed function
-  it does not occur. If it ever did, the write would land in the development
-  owner's partition rather than failing — DR-0018.
+  request parameter would defeat it entirely — DR-0010, DR-0024.
+- **Whatever carries the `AuthContext` into the service is not a security
+  boundary.** Anyone who could reach the service directly could forge it;
+  nothing can, because API Gateway is the only route to the function and
+  overwrites what it forwards on every request. Exposing the service by any
+  other path invalidates this — DR-0024.
+- **A missing `AuthContext` means development; an unreadable one means
+  rejection.** Neither occurs in a deployed function. If the first ever did, the
+  write would land in the development owner's partition rather than failing —
+  DR-0018. The second exists so that a caller whose identity was asserted and
+  then lost is refused rather than quietly attributed to someone else — DR-0024.
 - **`created_at` and the instant inside a record's sort key must be fixed-width
   RFC 3339 in UTC.** `store::TIMESTAMP` is the only thing enforcing it, and a
   variable-width instant fails silently — DR-0015.
