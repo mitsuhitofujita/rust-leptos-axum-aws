@@ -13,3 +13,9 @@ resource "aws_ssm_parameter" "lambda_function_name" {
   type  = "String"
   value = aws_lambda_function.api.function_name
 }
+
+resource "aws_ssm_parameter" "ecr_repository_url" {
+  name  = "/${var.project}/api/ecr_repository_url"
+  type  = "String"
+  value = aws_ecr_repository.api.repository_url
+}

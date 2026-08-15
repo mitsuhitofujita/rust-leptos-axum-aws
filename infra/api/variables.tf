@@ -10,22 +10,12 @@ variable "region" {
   default     = "ap-northeast-1"
 }
 
-variable "lambda_web_adapter_layer_arn" {
-  description = <<-EOT
-    The AWS Lambda Web Adapter layer, published by AWS into its own account and
-    therefore both region- and architecture-specific. Version 28 is adapter
-    1.0.1, x86_64 only. The layer is named LambdaAdapterLayerX86, not
-    LambdaAdapterLayerX86_64.
-  EOT
-  type        = string
-  default     = "arn:aws:lambda:ap-northeast-1:753240598075:layer:LambdaAdapterLayerX86:28"
-}
-
 variable "lambda_architecture" {
   description = <<-EOT
-    x86_64, matching the devcontainer's native Rust target. Moving to arm64
-    would mean cross-compiling crates/server and switching to the adapter's
-    LambdaAdapterLayerArm64 layer.
+    x86_64, matching the native architecture infra/api/Dockerfile builds on.
+    Moving to arm64 would mean building the image on an arm64 host or
+    cross-building it, and the Lambda Web Adapter image tag in that Dockerfile
+    would need its arm64 variant.
   EOT
   type        = string
   default     = "x86_64"

@@ -1,12 +1,3 @@
-# The bytes uploaded at create time and never again — see placeholder/bootstrap
-# and the ignore_changes below.
-data "archive_file" "placeholder" {
-  type             = "zip"
-  source_file      = "${path.module}/placeholder/bootstrap"
-  output_file_mode = "0755"
-  output_path      = "${path.module}/.terraform/placeholder.zip"
-}
-
 # Created here rather than left to Lambda, so that retention is set and the group
 # is destroyed with the layer. Lambda would otherwise create it on first
 # invocation with retention set to never expire.
@@ -22,22 +13,22 @@ resource "aws_lambda_function" "api" {
   memory_size   = var.lambda_memory_size
   timeout       = var.lambda_timeout
 
-  # crates/server is an ordinary axum binary, unmodified for Lambda. The custom
-  # runtime convention names the packaged executable `bootstrap`; the Lambda Web
-  # Adapter layer separately provides its own /opt/bootstrap. The two names are
-  # unrelated.
-  runtime = "provided.al2023"
-  handler = "bootstrap"
-  layers  = [var.lambda_web_adapter_layer_arn]
+  # crates/server is an ordinary axum binary, unmodified for Lambda — only how
+  # it is packaged changes here. infra/api/Dockerfile builds it into an image
+  # carrying the Lambda Web Adapter as an extension rather than a layer;
+  # AWS_LAMBDA_EXEC_WRAPPER, the setting that made the adapter layer's
+  # /opt/bootstrap the entry point, has no equivalent below because the image's
+  # own ENTRYPOINT is the service directly.
+  package_type = "Image"
 
-  filename         = data.archive_file.placeholder.output_path
-  source_code_hash = data.archive_file.placeholder.output_base64sha256
+  # Resolves to whatever `just deploy-api` most recently pushed under this tag.
+  # A later push moves the tag; ignore_changes below is what keeps a later
+  # apply from reading that as drift and reverting the function to whatever
+  # this expression evaluates to at plan time.
+  image_uri = "${aws_ecr_repository.api.repository_url}:latest"
 
   environment {
     variables = {
-      # Makes the adapter the entry point and the packaged binary the process it
-      # proxies to.
-      AWS_LAMBDA_EXEC_WRAPPER = "/opt/bootstrap"
       # crates/server binds 127.0.0.1:3000 as a constant; the adapter defaults to
       # 8080. Nothing checks that these two agree — docs/design/deployment.md is
       # what keeps them in step.
@@ -52,16 +43,17 @@ resource "aws_lambda_function" "api" {
   }
 
   # Artefacts deploy on their own cadence, by `aws lambda update-function-code`.
-  # Without this, every apply would revert the function to the placeholder and
-  # undo the last deploy.
+  # Without this, every apply would revert the function to whatever `:latest`
+  # resolved to at the previous apply and undo the last deploy.
   lifecycle {
-    ignore_changes = [filename, source_code_hash]
+    ignore_changes = [image_uri]
   }
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic,
     aws_iam_role_policy.lambda_table,
     aws_cloudwatch_log_group.lambda,
+    aws_ecr_repository_policy.api,
   ]
 }
 

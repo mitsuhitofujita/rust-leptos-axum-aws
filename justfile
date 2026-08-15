@@ -361,31 +361,30 @@ deploy-web:
         --distribution-id "${distribution}" --paths '/*' \
         --query 'Invalidation.Id' --output text
 
-# Build crates/server for Lambda and publish it.
+# Build crates/server as a container image and publish it. Runs on the host,
+# not in the devcontainer: the devcontainer has no container engine, and
+# deployment is intended to move to GitHub Actions rather than gain one —
+# docs/work/2026-08-10-api-artefact-packaging.md. Needs `docker` (or a
+# docker-CLI-compatible engine) and the AWS CLI, both resolved on the host's
+# own PATH and credentials, not the devcontainer's.
 deploy-api:
     #!/usr/bin/env bash
     set -euo pipefail
 
+    repository="$(just _ssm api/ecr_repository_url)"
     function="$(just _ssm api/lambda_function_name)"
-    target=x86_64-unknown-linux-gnu
+    registry="${repository%%/*}"
 
-    # No cross-compiler: the function is x86_64 (var.lambda_architecture) and so
-    # is the devcontainer. provided.al2023 ships glibc 2.34, which is the
-    # highest version this binary's symbols require today — a dependency that
-    # pulls in a newer one would fail at invocation, not at build.
-    cargo build -p server --release --target "${target}"
-
-    # provided.al2023 requires the executable to be named `bootstrap`, which is
-    # unrelated to the Lambda Web Adapter's own /opt/bootstrap.
-    staging=target/lambda
-    rm -rf "${staging}"
-    mkdir -p "${staging}"
-    cp "target/${target}/release/server" "${staging}/bootstrap"
-    (cd "${staging}" && zip -q bootstrap.zip bootstrap)
+    # infra/api/Dockerfile builds crates/server on the same provided.al2023
+    # base the function runs on, so nothing here cross-compiles or targets a
+    # glibc version by hand the way the zip form had to.
+    aws ecr get-login-password | docker login --username AWS --password-stdin "${registry}"
+    docker build -f infra/api/Dockerfile -t "${repository}:latest" .
+    docker push "${repository}:latest"
 
     aws lambda update-function-code \
         --function-name "${function}" \
-        --zip-file "fileb://${staging}/bootstrap.zip" \
+        --image-uri "${repository}:latest" \
         --query 'LastModified' --output text
 
     # update-function-code returns before the new code is live.

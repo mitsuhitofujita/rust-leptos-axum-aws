@@ -1,0 +1,23 @@
+# infra/api/Dockerfile builds with the workspace root as context. Everything
+# below is either large and irrelevant to `cargo build -p server`, or state and
+# secrets that must never enter an image layer.
+
+.git
+target
+dist
+.local
+.vscode
+.claude
+.devcontainer
+docs
+style
+public
+
+infra/**/.terraform
+infra/backend.hcl
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+!**/*.tfvars.example
+
+dynamodb-local-metadata.json
