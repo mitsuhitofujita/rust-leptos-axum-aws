@@ -24,6 +24,14 @@ artefact must not inherit a property of the machine that happened to build it.
 Work pauses here to commit. This log is the record of what was found and what
 was decided; nothing has been implemented yet.
 
+Work resumes: carry out the packaging migration this log already decided on.
+Deployment is intended to run through GitHub Actions eventually, but that is not
+being built now. For the moment, only the Plan's first step — where the image is
+built — is settled: the build happens outside the devcontainer, on the host,
+rather than by mounting a container engine into the devcontainer or standing up
+CodeBuild. The latter two are rejected for now rather than ruled out permanently;
+GitHub Actions arriving later is the reason neither is worth building today.
+
 ## Interpretation
 
 **What is being asked.** The deployed API answers 500 to everything. The cause
@@ -161,6 +169,18 @@ one it runs in, and it can be closed at any of three layers.
 | Cold start | unchanged | unchanged | worse; image is hundreds of MB against a 7 MB zip |
 | Open risk | image rebuild, unverifiable from inside | `aws-lc-sys` under musl may need bindgen and libclang | engine access, placeholder ordering |
 
+### 2026-08-15 — where the build runs, resolved
+
+Work resumes on the Decision below. The Plan's first step — engine access, host
+build, or CodeBuild — is settled: the build and the push run on the host,
+outside the devcontainer, confirmed directly. Deployment moving to GitHub
+Actions later is the stated reason neither of the other two is worth building
+now; both stay open for whenever that lands. Nothing about the devcontainer
+changes as a result. This is a plan resolution, not a new decision with
+alternatives weighed against each other from scratch, so it is recorded here
+rather than as its own Decision Record; the Decision Record this log still owes
+is the packaging direction below, once implemented.
+
 ## Decision
 
 **The artefact stops inheriting the development environment.** The direction is
@@ -183,10 +203,16 @@ failure.
 
 ## Plan
 
-1. **Decide where images are built.** The devcontainer has no engine. Either the
-   host's podman socket is mounted and a client installed, or the build runs on
-   the host, or it moves to CodeBuild. This choice comes first because the deploy
-   recipe's shape follows from it.
+1. **Decide where images are built. Resolved: on the host, outside the
+   devcontainer.** The devcontainer has no engine, and the three ways to give it
+   one — mounting the host's podman socket, moving the build to CodeBuild, or
+   this — were weighed against a deploy pipeline that does not exist yet:
+   deployment is intended to run through GitHub Actions eventually, and standing
+   up either alternative now would be work a CI runner replaces later. Nothing
+   about the devcontainer changes; the build and push steps run as commands
+   invoked on the host machine instead of through a devcontainer `just` recipe,
+   until GitHub Actions takes them over. The deploy recipe's shape below reflects
+   this.
 2. **`infra/api`:** an ECR repository with a lifecycle policy, `package_type =
    "Image"`, `image_uri`, and the execution role's pull permissions.
 3. **The placeholder ordering inverts.** Today the layer is applied with a
@@ -199,15 +225,107 @@ failure.
    `AWS_LWA_PORT` and `AWS_LWA_READINESS_CHECK_PATH` set as they are today.
    `AWS_LAMBDA_EXEC_WRAPPER` belongs to the zip form and is expected to go away —
    confirm against the adapter's documentation before relying on it.
-5. **`just deploy-api`** becomes build, ECR login, push, and
-   `update-function-code --image-uri`.
+5. **The deploy path splits across the devcontainer boundary.** Build, ECR
+   login, push, and `update-function-code --image-uri` run as a sequence
+   invoked on the host, not as a devcontainer `just` recipe — resolved in step 1
+   above. Whether any part of this is still worth expressing as a `just` recipe
+   the host also has `just` to run, or as a plain script, is a detail for when
+   this step is implemented, not a design decision this log needs to settle
+   first.
 6. **Documents:** a Decision Record for the packaging decision; the glibc
    headroom constraint in `docs/design/deployment.md` rewritten, since it stops
    being true; `workspace.md` only if the devcontainer changes after all.
 
+### 2026-08-15 — steps 2 through 6 carried out
+
+**`infra/api/Dockerfile`.** Two stages, both `public.ecr.aws/lambda/provided:al2023`
+— the build stage installs a C toolchain via `microdnf` and Rust via `rustup`,
+reading the version from the repository's `rust-toolchain.toml` rather than
+naming it a second time; the runtime stage copies in the Lambda Web Adapter
+from `public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1` as an extension and the
+built binary as `/var/task/bootstrap`, with that binary as `ENTRYPOINT`
+directly. `AWS_LAMBDA_EXEC_WRAPPER` is gone, matching the plan's expectation —
+nothing in the adapter's documented container-image usage calls for it, since
+there is no layer left to redirect the entry point to. A root `.dockerignore`
+keeps `target/`, `.git/`, and every `infra/**/.terraform`, `.tfstate` and
+`.tfvars` out of the build context, the last group because the context would
+otherwise carry credentials-adjacent state into an image layer.
+
+**`infra/api/ecr.tf`** (new file). An `aws_ecr_repository`, a lifecycle policy
+expiring untagged images after a day — the only thing worth expiring, since
+`deploy-api` always pushes the same `latest` tag and never accumulates a
+second tagged image — and an `aws_ecr_repository_policy` granting
+`lambda.amazonaws.com` pull access. That policy's `aws:SourceArn` condition is
+built from `local.name` and `data.aws_caller_identity.current`, not read from
+`aws_lambda_function.api.arn`, specifically to avoid a cycle: the function
+cannot be created without an image already in the repository, so a policy that
+depended on the function first could never be satisfied on a first create.
+
+**`infra/api/lambda.tf`.** `package_type = "Image"`, `image_uri` pointing at
+the repository's `latest` tag, `ignore_changes = [image_uri]` in place of the
+zip form's `ignore_changes = [filename, source_code_hash]`. `runtime`,
+`handler`, `layers` and the `archive_file` placeholder data source are gone;
+`infra/api/placeholder/` is deleted along with the `hashicorp/archive`
+provider requirement, since a container image has no equivalent of a
+bytes-free stub — see the Plan's step 3, resolved by documenting the ordering
+in `deployment.md`'s constraints rather than by inventing one.
+
+**`infra/api/variables.tf`.** `lambda_web_adapter_layer_arn` is gone; nothing
+reads a layer ARN anymore. `lambda_architecture`'s description now points at
+the Dockerfile and the adapter image's arch tag instead of a layer ARN.
+
+**`infra/api/outputs.tf` and `ssm.tf`.** `ecr_repository_url` published
+alongside `lambda_function_name`, for the host-side `deploy-api` to resolve
+where to build and push.
+
+**`justfile`'s `deploy-api`.** Rewritten around `docker build` /
+`docker push` / `update-function-code --image-uri`, with a comment banner
+recording that it runs on the host, not the devcontainer, and why — resolved
+in step 1.
+
+**`docs/design/deployment.md`.** The running-system table row, the `infra/`
+tree listing, "The API's runtime shape", the "API — `just deploy-api`"
+paragraph, the SSM parameter table, and five Constraints bullets (the glibc
+headroom bullet, the `zip`-dependency bullet, the `ignore_changes` bullet, and
+the `x86_64`/arm64 bullet) are rewritten for the container-image form. A third
+top-of-document note records that the migration is drafted but not applied —
+the deployed function is still the zip-and-layer form until the steps below
+run. This edit is a draft; per `docs/README.md`'s ownership rule it needs
+confirmation before the work here is complete.
+
+**`docs/decisions/DR-0026-the-api-is-packaged-as-a-container-image.md`**
+(new). Records the decision this log already made, the two alternatives
+weighed and the trap-as-alternative rejected outright, and the consequences —
+most namely that migrating an *already-running* function replaces it, since
+`package_type` cannot change in place, which is the one apply in this
+document that is not the zero-downtime kind.
+
+**What was not done, and cannot be done from here.** This environment has no
+container engine, so `infra/api/Dockerfile` has never actually been built —
+every claim about what `microdnf` and `rustup` install successfully inside
+`public.ecr.aws/lambda/provided:al2023` is unverified. Building it is the
+first real test of this decision, and it runs on the host per the resolution
+above. No `terraform apply` has run either; the two-step apply sequence this
+log's Constraints addition to `deployment.md` describes — ECR repository
+first, image pushed, then the function — is written but not exercised. The
+currently deployed function is untouched and still answers requests the same
+way it did when this log's Findings section left off.
+
 ## Verification
 
-Nothing is fixed. As of this entry:
+What could be checked from inside this environment was checked; what needs
+the host's container engine or real AWS credentials could not be, and is
+listed separately below.
+
+| Checked | Result |
+| --- | --- |
+| `just tf-validate` (all five layers, including `api`) | passes |
+| `terraform fmt -recursive -check infra` | passes |
+| `just --list` | parses; `deploy-api` and every other recipe still list |
+| `infra/api/.terraform.lock.hcl` | the `hashicorp/archive` entry dropped, `hashicorp/aws` left at its prior pinned version — a minimal diff, not a provider upgrade |
+
+Earlier, before this session's work, the deployed system's own state was
+checked and is unchanged by anything above:
 
 | Checked | Result |
 | --- | --- |
@@ -216,15 +334,41 @@ Nothing is fixed. As of this entry:
 | CloudFront root | 200; the SPA is served correctly |
 | Lambda configuration | `provided.al2023`, `x86_64`, adapter layer `LambdaAdapterLayerX86:28`, `AWS_LWA_PORT=3000`, `AWS_LWA_READINESS_CHECK_PATH=/health`, `TABLE_NAME` set, `State: Active` |
 
-The function is healthy by every measure Lambda reports; only its packaged
-executable is unloadable.
+Not yet run, because they need a container engine and AWS credentials this
+environment does not have — the actual return on this log, still outstanding:
+
+- `docker build -f infra/api/Dockerfile .` on the host, and `objdump -T`
+  against `GLIBC_` inside the built image, confirming the headroom DR-0026
+  claims is structural rather than assumed.
+- `just tf-apply api` with the ECR repository added but the function still on
+  the zip form, then one `just deploy-api` to populate the `latest` tag, then
+  a second `just tf-apply api` to switch `package_type` — the two-step
+  sequence `deployment.md`'s new constraint describes, exercised for the
+  first time.
+- `GET /health` returning `ok` again afterward, and `GET /api/action-types`
+  with a real token reaching the function, which is what this whole log was
+  opened to restore.
 
 ## Retirement
 
-- [ ] Design Documents updated — `deployment.md` at minimum, whose glibc
-      constraint this work invalidates
-- [ ] Decision Records written (DR-____) — the packaging decision above
-- [ ] Non-obvious knowledge preserved — that the two symbol families have
-      different origins and both are fatal; that cargo fingerprints do not see a
-      libc change; that a container image only helps when the build is inside it
-- [ ] No durable document depends on this log
+- [x] Design Documents updated — `docs/design/deployment.md`, drafted this
+      session; **awaiting the confirmation `docs/README.md` requires before an
+      overwrite of a Design Document counts as done**
+- [x] Decision Records written — DR-0026
+- [x] Non-obvious knowledge preserved — the two symbol families' different
+      origins and why both are fatal, and cargo fingerprints not seeing a libc
+      change, are DR-0026's Context; that a container image only helps when the
+      build is inside it is DR-0026's Alternatives, naming it as a trap rather
+      than a real option; the ECR repository policy's circular-dependency
+      avoidance is `infra/api/ecr.tf`'s own comment, beside the code it explains
+- [ ] No durable document depends on this log — not yet true: `deployment.md`'s
+      new top-of-document note and its two-step-apply constraint both cite this
+      log by name, and stay cited until the steps above are actually run and
+      their result recorded directly in `deployment.md` instead
+
+**This log stays open.** The durable layer describes the intended shape
+correctly, but nothing has verified that shape yet, and the currently running
+function has not moved. That gap — between what is documented and what is
+deployed — is exactly what the second top-of-document note in
+`deployment.md` now says in one sentence, and it is what closes this log when
+it stops being true.

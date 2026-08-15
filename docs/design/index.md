@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-14
+Updated: 2026-08-15
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -65,3 +65,4 @@ Not yet written, because it does not exist yet:
 | [DR-0023](../decisions/DR-0023-aws-behaviour-is-not-reimplemented-locally.md) | AWS behaviour is not re-implemented locally |
 | [DR-0024](../decisions/DR-0024-the-service-reads-an-authcontext.md) | The service reads an `AuthContext`, not AWS's request context |
 | [DR-0025](../decisions/DR-0025-the-edge-produces-the-authcontext-by-parameter-mapping.md) | The edge produces the `AuthContext` by API Gateway request parameter mapping |
+| [DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md) | The API is packaged as a container image, with the Lambda Web Adapter built in as an extension |

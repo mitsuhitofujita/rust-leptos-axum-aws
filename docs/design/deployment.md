@@ -1,6 +1,6 @@
 # Deployment
 
-Updated: 2026-08-14
+Updated: 2026-08-15
 
 Note: all five layers have been applied and their twelve SSM parameters exist.
 The API is deployed and `GET /health` returns `ok`. The table is empty and
@@ -15,6 +15,12 @@ applied**, and the deployed function is still the binary that predates it. The
 two are consistent as they stand. Bringing them forward has a required order —
 see the constraint on it below, which is the one place in this document where
 doing the two steps the wrong way round is worse than doing neither.
+
+Note: this document describes the container-image packaging below as the
+target shape. Neither `infra/api` nor `just deploy-api` has been applied in
+that shape yet — the deployed function is still the zip plus Lambda-layer form.
+`docs/work/2026-08-10-api-artefact-packaging.md` is the record of the
+migration and its outstanding steps.
 
 ## Purpose
 
@@ -38,7 +44,7 @@ the API is a separate service, and the two are released independently.
 | The Leptos SPA (`dist/`) | A private S3 bucket, served through CloudFront with Origin Access Control |
 | Authentication | A Cognito User Pool with Google as an identity provider, Authorization Code Flow with PKCE |
 | Application data | One on-demand DynamoDB table, keyed by owner — see [persistence.md](persistence.md) |
-| The axum API (`crates/server`) | AWS Lambda on `provided.al2023`, fronted by the AWS Lambda Web Adapter |
+| The axum API (`crates/server`) | AWS Lambda on `provided.al2023`, packaged as a container image with the AWS Lambda Web Adapter built in |
 | API exposure | An API Gateway HTTP API with a JWT authorizer validating Cognito access tokens |
 
 ### The configuration
@@ -57,8 +63,8 @@ infra/
                              app client
   data/                      the DynamoDB table — DR-0015
   api/                       Lambda, HTTP API, JWT authorizer, CORS, IAM role,
-                             log groups
-    placeholder/bootstrap    stand-in package for the first apply only
+                             log groups, the ECR repository the image lives in
+    Dockerfile               builds crates/server into the image the function runs
 ```
 
 Every layer holds `versions.tf`, `variables.tf`, `outputs.tf` and its resources;
@@ -140,6 +146,7 @@ what it needs with the `aws_ssm_parameter` data source.
 | `/<project>/data/table_arn` | `data` | `api`, to scope the Lambda's IAM policy |
 | `/<project>/api/api_endpoint` | `api` | `just deploy-web`, as `API_BASE_URL` |
 | `/<project>/api/lambda_function_name` | `api` | `just deploy-api` |
+| `/<project>/api/ecr_repository_url` | `api` | `just deploy-api`, as where the image is built and pushed |
 
 The build and the deploy commands are the second consumer of these parameters,
 which is why they are published rather than passed through state. Two are read
@@ -152,26 +159,39 @@ so the sign-in flow can be exercised against `trunk serve`.
 ### The API's runtime shape
 
 `crates/server` is an ordinary axum binary and is not modified for Lambda. The
-Lambda Web Adapter turns the Lambda invocation into an HTTP request against it:
+Lambda Web Adapter turns the Lambda invocation into an HTTP request against it.
+It is packaged as a container image, built by `infra/api/Dockerfile`, rather
+than as a zip plus an attached Lambda layer — the earlier form, and why it
+changed, is `docs/work/2026-08-10-api-artefact-packaging.md` and its Decision
+Record.
 
-- Build for `provided.al2023` on `x86_64`, name the executable `bootstrap`, and
-  zip it.
-- Attach the Lambda Web Adapter as a layer. It provides `/opt/bootstrap`. The
-  layer is `arn:aws:lambda:ap-northeast-1:753240598075:layer:LambdaAdapterLayerX86:28`
-  — adapter 1.0.1, published by AWS into its own account, and therefore both
-  region- and architecture-specific. Its name is `LambdaAdapterLayerX86`, not
-  `LambdaAdapterLayerX86_64`.
-- Set `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap`, which makes the adapter the
-  entry point and the packaged binary the process it proxies to.
-- Set `AWS_LWA_PORT=3000`, matching the address `crates/server` binds.
-- Set `AWS_LWA_READINESS_CHECK_PATH=/health`, which the service already serves.
-- Set `TABLE_NAME` from the `data` layer's parameter, so the table name reaches
-  the service without being written down twice. `crates/server` does not read it
-  yet.
+- Both of the Dockerfile's stages are `public.ecr.aws/lambda/provided:al2023`.
+  Building inside the runtime's own base, rather than in the devcontainer or on
+  the host's Rust image, is what keeps the binary's glibc requirement from
+  exceeding what the function actually ships — see the constraint below.
+- The build stage installs a C toolchain with `microdnf` and a Rust toolchain
+  with `rustup`, reading the version from `rust-toolchain.toml` — the same file
+  the devcontainer reads — rather than naming the version a second time.
+- The Lambda Web Adapter is copied in as an extension from its own published
+  image, `public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1`, to
+  `/opt/extensions/lambda-adapter`. This is the same adapter version the
+  earlier layer form published; only how it attaches to the function changed.
+- The image's `ENTRYPOINT` is `crates/server`'s own binary, copied to
+  `/var/task/bootstrap`, directly. There is no `AWS_LAMBDA_EXEC_WRAPPER`: that
+  setting made the adapter layer's `/opt/bootstrap` the entry point under the
+  zip form, and has no role once the adapter is an extension the runtime starts
+  on its own and the image's `ENTRYPOINT` is the service.
+- `AWS_LWA_PORT=3000`, matching the address `crates/server` binds, and
+  `AWS_LWA_READINESS_CHECK_PATH=/health`, the endpoint the service already
+  serves, are set on the function by Terraform (`infra/api/lambda.tf`), not in
+  the Dockerfile — the same as under the zip form.
+- `TABLE_NAME` is set the same way, from the `data` layer's parameter, so the
+  table name reaches the service without being written down twice.
+  `crates/server` does not read it yet.
 
-The two `bootstrap` names are unrelated: one is the `provided.al2023` handler
-convention for the packaged binary, the other is the adapter's own executable in
-the layer.
+The `/var/task/bootstrap` name and the adapter's own extension binary are
+unrelated, despite both being named `bootstrap` under the zip form this
+replaces, where the adapter's layer separately provided `/opt/bootstrap`.
 
 **Routes.** The HTTP API declares one per method the SPA calls, plus the probe:
 
@@ -275,11 +295,18 @@ assets change name, and `index.html` is on `Managed-CachingDisabled` — but
 invalidations are free at this volume and a wildcard survives a change to the
 cache behaviours.
 
-**API — `just deploy-api`.** Build `crates/server` for `x86_64-unknown-linux-gnu`,
-copy it to `bootstrap`, zip it, `aws lambda update-function-code`, then
+**API — `just deploy-api`.** Build the image from `infra/api/Dockerfile`, push it
+to the `api` layer's ECR repository under the `latest` tag, then
+`aws lambda update-function-code --image-uri`, then
 `aws lambda wait function-updated`, since the update call returns before the new
-code is live. No Terraform run is involved, and no cross-compiler either — see
-the glibc constraint below.
+code is live. No Terraform run is involved.
+
+**This recipe runs on the host, not in the devcontainer.** The devcontainer has
+no container engine, and deployment is intended to move to GitHub Actions later
+rather than have one added to it —
+`docs/work/2026-08-10-api-artefact-packaging.md`. `just deploy-web` and
+`just tf-*` are unaffected and still run from either side; this is the one
+recipe in this document a devcontainer shell cannot complete.
 
 ### Configuring the SPA
 
@@ -408,18 +435,23 @@ without running either.
   a non-streaming compile — but the fallback is slower and warns in every
   visitor's console, and one flag avoids it.
 
-- **The Lambda binary is built natively, on glibc headroom that nothing
-  enforces.** `provided.al2023` ships glibc 2.34; the devcontainer's is 2.41.
-  What makes the native build safe is not the matching architecture but the fact
-  that the binary's highest versioned symbol is currently `GLIBC_2.34` exactly —
-  a dependency that pulls in a newer one would break at invocation, not at build,
-  and no schema check or test would see it first. `objdump -T` over the release
-  binary, filtered for `GLIBC_`, is the check.
+- **The Lambda binary is built inside the runtime's own base image, which is
+  what makes its glibc requirement structural rather than assumed.** A binary
+  built in the devcontainer or on the host's own Rust image once required glibc
+  symbols newer than `provided.al2023` ships, and failed only at invocation,
+  with no schema check or test seeing it first —
+  `docs/work/2026-08-10-api-artefact-packaging.md` is the record of that
+  failure and why packaging moved to a container image over it. Building both
+  of `infra/api/Dockerfile`'s stages on `public.ecr.aws/lambda/provided:al2023`
+  closes the gap by construction: nothing links against a newer libc than the
+  one the function ships, because none is present while linking. `objdump -T`
+  over the binary inside the built image, filtered for `GLIBC_`, is still the
+  check, and still tops out at `GLIBC_2.34`.
 
-- **`zip` is a devcontainer dependency of `deploy-api`.** `provided.al2023`
-  accepts a zip and nothing else, and a zip cannot be produced by the `tar`
-  already present. `.devcontainer/Dockerfile` installs it alongside the `unzip`
-  that Terraform's own installation needs.
+- **`docker` (or a docker-CLI-compatible engine) is a host dependency of
+  `deploy-api`, not a devcontainer one.** The devcontainer has no container
+  engine, so the image is built and pushed from the host — see "Deploying
+  artefacts" above.
 
 - **The project name is spelled out in the `justfile` as well as in every
   layer's `variables.tf`.** The deploy recipes address SSM paths rooted at that
@@ -427,12 +459,24 @@ without running either.
   deliberate — it is what keeps a deploy free of Terraform state — and the two
   are kept in step by hand.
 
-- **The Lambda's `filename` and `source_code_hash` are under
-  `ignore_changes`.** Without it, every `terraform apply` reverts the function to
-  whatever placeholder package the configuration names, undoing the last deploy.
-  The placeholder is `infra/api/placeholder/bootstrap`, a shell stub zipped by
-  `archive_file`. It exists so the first create has bytes to upload and is never
-  the running code; it exits non-zero if it ever is.
+- **The Lambda's `image_uri` is under `ignore_changes`.** Without it, every
+  `terraform apply` would revert the function to whatever `:latest` resolves to
+  in the ECR repository at that moment, which is only ever the image
+  `deploy-api` most recently pushed — not a distinct placeholder, since a
+  container image has no equivalent of a bytes-free stub the way the zip form's
+  `archive_file` did.
+
+- **The ECR repository has to hold an image before `aws_lambda_function.api`
+  can be created with `package_type = "Image"`.** This has no bearing on the
+  ordinary apply-then-deploy cycle, where an image already exists from the
+  previous deploy — it matters once, migrating from the zip form or standing
+  the layer up from nothing. Applying `infra/api` with the ECR repository but
+  without the function first, running `deploy-api` once the repository exists,
+  then applying the function is the sequence; there is no committed placeholder
+  image to apply against instead. Migrating an already-running function also
+  replaces it — `package_type` cannot change in place — so this apply is not
+  the zero-downtime kind the rest of this document's ordering constraints
+  describe.
 
 - **A bundle built without the two Cognito variables cannot call the API.** The
   SPA obtains a token and attaches it (DR-0010), but only when
@@ -447,10 +491,11 @@ without running either.
   with a token from `just dev-web-auth`, and it is a consequence of the
   single-client decision above rather than a separate arrangement.
 
-- **The Lambda is `x86_64`.** It matches the devcontainer's native Rust target,
-  so `crates/server` builds for it without a cross-compiler. Moving to arm64
-  means both a cross-compiled binary and the adapter's `LambdaAdapterLayerArm64`
-  layer, which is why the architecture is a variable rather than a constant.
+- **The Lambda is `x86_64`.** It matches the architecture `infra/api/Dockerfile`
+  builds on natively. Moving to arm64 means building the image on an arm64 host
+  (or cross-building it) and switching the Dockerfile's adapter `COPY` to the
+  adapter image's arm64 tag, which is why the architecture is a variable rather
+  than a constant.
 
 - **The Cognito user pool carries `deletion_protection` as well as
   `prevent_destroy`.** DR-0005 rates its loss as the only irreversible one in the
