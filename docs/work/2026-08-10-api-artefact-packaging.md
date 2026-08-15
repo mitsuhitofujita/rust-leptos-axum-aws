@@ -32,6 +32,19 @@ rather than by mounting a container engine into the devcontainer or standing up
 CodeBuild. The latter two are rejected for now rather than ruled out permanently;
 GitHub Actions arriving later is the reason neither is worth building today.
 
+The build-location question above is reopened. The devcontainer is to gain a
+container-engine client that reaches the host engine over its socket —
+Docker-outside-of-Docker, applied to podman since that is the host's actual
+engine, rather than a nested engine (Docker-in-Docker), which was judged too
+heavy for a need that is only ever reaching the one engine the host already
+runs. Standing up GitHub Actions as the way `deploy-api` runs was weighed as
+the alternative and judged heavier still for now: it needs new IAM/OIDC trust
+infrastructure and has to encode the `tf-apply api`-before-`deploy-api`
+ordering safely against a single production environment, where getting it
+wrong is the misattribution this project's own Constraints section already
+rates as unsafe rather than merely inconvenient. The socket-mount change goes
+first; GitHub Actions stays future work, not ruled out.
+
 ## Interpretation
 
 **What is being asked.** The deployed API answers 500 to everything. The cause
@@ -212,7 +225,9 @@ failure.
    about the devcontainer changes; the build and push steps run as commands
    invoked on the host machine instead of through a devcontainer `just` recipe,
    until GitHub Actions takes them over. The deploy recipe's shape below reflects
-   this.
+   this. **Superseded 2026-08-15 — see the Plan addendum below.** The reasoning
+   above was sound for what has shipped so far; the next round of work reopens
+   it deliberately, on different grounds.
 2. **`infra/api`:** an ECR repository with a lifecycle policy, `package_type =
    "Image"`, `image_uri`, and the execution role's pull permissions.
 3. **The placeholder ordering inverts.** Today the layer is applied with a
@@ -310,6 +325,114 @@ log's Constraints addition to `deployment.md` describes — ECR repository
 first, image pushed, then the function — is written but not exercised. The
 currently deployed function is untouched and still answers requests the same
 way it did when this log's Findings section left off.
+
+### 2026-08-15 — engine access into the devcontainer, revisited
+
+Step 1's resolution — build on the host, keep the devcontainer engine-less
+until GitHub Actions lands — is reopened, on different grounds than the ones
+weighed when it was written. The choice this time is not between the host and
+a CI runner; it is between two ways of giving the devcontainer engine access at
+all, weighed against standing up GitHub Actions as CD instead.
+
+**Docker-in-Docker was considered and rejected.** A nested engine inside the
+devcontainer carries its own storage driver, its own daemon, and the usual
+overlay-filesystem overhead of running a container engine inside a container —
+weight with no return here, since nothing needs an isolated engine; it only
+needs to reach the one the host already runs.
+
+**Docker-outside-of-Docker is the direction — applied to podman.** The host
+runs podman, not Docker (`container=podman` in the environment, found while
+resolving step 1 the first time). The devcontainer gains a client — `docker`
+or a podman-compatible equivalent — and the host's engine socket is mounted
+in, so `docker login` / `docker build -f infra/api/Dockerfile` / `docker push`
+in `deploy-api` (`justfile:381-383`) reach a real engine without a second one
+running inside the devcontainer. Those three commands are unchanged either
+way; only whether the socket resolves changes.
+
+**GitHub Actions CD was weighed as the alternative and judged heavier, for
+now.** It needs an OIDC trust relationship between GitHub and AWS — new
+Terraform, arguably a sixth root module or an extension of `api` — and it has
+to encode the one ordering constraint `docs/design/deployment.md`'s
+Constraints section already calls out as unsafe rather than merely
+inconvenient: `just tf-apply api` before `deploy-api`, misattributing every
+request if reversed. Getting that wrong in a workflow is a mistake against the
+one production environment this project has. The socket-mount change is
+local, reversible by rebuilding the devcontainer, and touches no AWS trust
+relationship — it goes first.
+
+**Open, not yet done:**
+
+- Add a container-engine-client feature (or a hand-rolled socket mount plus
+  client install) to `.devcontainer/devcontainer.json`.
+- Confirm the socket's group/permissions let the devcontainer's `vscode` user
+  reach it without `sudo`.
+- Run `deploy-api` from inside the devcontainer end to end — build, push,
+  `update-function-code`, `wait function-updated` — against the real ECR
+  repository and function, not just `docker build` in isolation.
+- `docs/design/deployment.md`'s "This recipe runs on the host, not in the
+  devcontainer" note, and the constraint bullet naming `docker` as a host
+  dependency, need rewriting once this is confirmed working — not before,
+  since the note is accurate until then.
+- Whether this earns its own Decision Record, or is folded into whatever
+  record eventually closes this log, is a `work-done` question once it is
+  built and checked; DR-0026 already states the host-build arrangement and the
+  reasoning for it, so a record here would need to say what changed and why,
+  not repeat DR-0026's Context.
+
+### 2026-08-15 — the devcontainer/Dockerfile change, made
+
+`docker-ce-cli` (client only, no daemon, no `containerd.io`) is installed in
+`.devcontainer/Dockerfile` from Docker's own apt repository, added ahead of
+the `vscode` user's creation — not from the `docker-outside-of-docker`
+devcontainer feature, on instruction. `devcontainer.json` gained a `mounts`
+entry bind-mounting the host's rootless podman socket,
+`/run/user/1000/podman/podman.sock`, to `/var/run/docker.sock` — the `docker`
+CLI's own default socket path, so no `DOCKER_HOST` is set. No group or GID
+matching was added: the container's `vscode` user is UID 1000, stated to
+already match the host user, so a rootless podman socket owned by that UID is
+directly readable and writable without one.
+
+**The workspace mount was also changed, on instruction, though the Plan above
+judged it unnecessary for `deploy-api` specifically.** `workspaceMount` and
+`workspaceFolder` now both resolve to `${localWorkspaceFolder}`, so the
+container's path for the repository is identical to the host's, rather than
+the devcontainer default of `/workspaces/<folder-name>`. Reasoning: `docker
+build`'s context is uploaded as a tar regardless of where either side mounts
+the repository, so this was not required for `deploy-api` as it stands —
+but it removes a latent trap for anything added later that passes a host path
+through the socket, such as a bind-mounted `docker run -v`. The Dockerfile's
+own `ARG WORKSPACE_DIR=/workspace` / `WORKDIR ${WORKSPACE_DIR}` is now dead at
+runtime — VS Code cds into `workspaceFolder` regardless of the image's
+`WORKDIR` — and was left as is, since it was already superseded before this
+change: the live session's path was already `/workspaces/rust-leptos-axum-aws`
+before today, not `/workspace`, so nothing that worked before this depended on
+it.
+
+**Not yet verified, and cannot be from here.** This environment cannot rebuild
+its own devcontainer or reach a podman socket from inside itself. Outstanding,
+against the real host:
+
+- The devcontainer rebuilds cleanly with the new `Dockerfile` layer (the apt
+  repository add, the key fetch, `docker-ce-cli` installing without error).
+- `/run/user/1000/podman/podman.sock` is in fact where the host's rootless
+  podman socket lives — the comment in `devcontainer.json` names the
+  authoritative way to check, `podman info --format
+  '{{.Host.RemoteSocket.Path}}'` on the host, run once and not yet confirmed
+  against this project's actual host.
+- `docker version` inside the devcontainer reaches the daemon (`Server:` side
+  populated, not just `Client:`) through the mounted socket.
+- `just deploy-api` run from inside the devcontainer end to end — build, push,
+  `update-function-code`, `wait function-updated` — against the real ECR
+  repository and function.
+- Whether the workspace-path change causes any regression in `trunk serve`,
+  bind mounts, or anything else keyed to the container's path — nothing found
+  by search depended on the old `/workspaces/rust-leptos-axum-aws` path
+  string, but that search covered only `.json`, `.toml`, `Dockerfile` and
+  `justfile`.
+
+`docs/design/deployment.md`'s host-only note for `deploy-api` stays as it
+is until these are confirmed — the note is still accurate today, since the
+change is unverified.
 
 ## Verification
 

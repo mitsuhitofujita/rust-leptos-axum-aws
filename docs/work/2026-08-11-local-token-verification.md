@@ -155,6 +155,22 @@ that real tokens are verified against the real pool, and the audience rule, the
 `Bearer alice` trade-off, and the rejected alternatives have no home in a Design
 Document. DR-0022.
 
+## Progress
+
+### 2026-08-15 — reconsideration opened elsewhere
+
+`docs/work/2026-08-15-service-owns-token-verification.md` reopens the premise
+this log's Interpretation relies on — that verifying a token in
+`crates/server` is refused by DR-0017 because the authorizer this log stands in
+for stays in front of the service. That new log proposes removing the
+authorizer and moving verification into `crates/server` itself, reusing the
+`jwks.rs`/`authorizer.rs` logic this log built. If that work proceeds,
+`devgateway`'s `cognito` mode stops standing in for anything, and what happens
+to this log — closed as superseded, or folded into that work's own retirement —
+is a question for `work-done` once the new work is implemented, not decided
+here. Nothing below is changed by this; the four checks this log still owes
+are unaffected either way.
+
 ## Verification
 
 Everything that needs no AWS was run and passed.
