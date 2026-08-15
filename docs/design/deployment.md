@@ -1,6 +1,6 @@
 # Deployment
 
-Updated: 2026-08-13
+Updated: 2026-08-14
 
 Note: all five layers have been applied and their twelve SSM parameters exist.
 The API is deployed and `GET /health` returns `ok`. The table is empty and
@@ -9,6 +9,12 @@ nothing reads or writes it yet — `crates/server` still answers
 without the two Cognito variables, so it sends no token and `/api` calls are
 answered 401 there; one `just deploy-web` replaces it with a build that signs
 in.
+
+Note: the `AuthContext` parameter mapping below is configured and **not yet
+applied**, and the deployed function is still the binary that predates it. The
+two are consistent as they stand. Bringing them forward has a required order —
+see the constraint on it below, which is the one place in this document where
+doing the two steps the wrong way round is worse than doing neither.
 
 ## Purpose
 
@@ -169,11 +175,35 @@ the layer.
 
 **Routes.** The HTTP API declares one per method the SPA calls, plus the probe:
 
-| Route | Authorization |
-| --- | --- |
-| `GET /api/{proxy+}` | JWT authorizer, so every call the SPA makes carries a Cognito access token |
-| `POST /api/{proxy+}` | the same |
-| `GET /health` | none — a probe has no token, and the endpoint returns a constant |
+| Route | Authorization | Integration |
+| --- | --- | --- |
+| `GET /api/{proxy+}` | JWT authorizer, so every call the SPA makes carries a Cognito access token | `api` |
+| `POST /api/{proxy+}` | the same | `api` |
+| `GET /health` | none — a probe has no token, and the endpoint returns a constant | `health` |
+
+**The edge produces the service's `AuthContext`.** `crates/server` reads two
+headers and knows nothing about API Gateway (`backend.md`, DR-0024). This layer is
+where the conversion happens, by request parameter mapping on the `api`
+integration:
+
+```hcl
+"overwrite:header.x-auth-subject" = "$context.authorizer.claims.sub"
+"overwrite:header.x-auth-edge"    = "apigateway"
+```
+
+Mapping is AWS's own mechanism, so nothing here re-implements AWS behaviour
+(DR-0023), and because the subject is one value API Gateway resolves, no map of
+claims is forwarded or parsed anywhere.
+
+`overwrite:` is load-bearing: the service trusts these headers only because the
+edge replaces whatever the caller sent, and `append:` would end that quietly.
+
+**Two integrations to one function, which is the only reason there are two.**
+Mapping is an attribute of the integration, not of the route, and `/health` is
+routed outside the authorizer where `$context.authorizer.claims.sub` cannot
+resolve. API Gateway skips a mapping whose source does not resolve, so a shared
+integration would let a caller's own `x-auth-*` headers through on the probe. The
+`health` integration carries `remove:` for both instead — DR-0025.
 
 `{proxy+}` means a new *endpoint* under `/api` in `crates/server` needs no change
 to the infrastructure. A new *method* does: it goes in `local.api_methods` in
@@ -185,20 +215,24 @@ CORS constraint below.
 
 **The edge is verified here, not locally.** Everything this section describes
 between the browser and the service — the route table, the preflight answered
-ahead of the authorizer, the 401 for a request with no token, and the
-`x-amzn-request-context` header the adapter forwards — is checked by exercising
-the deployed API, because it is behaviour AWS defines. It was reproduced locally
-for a time, under DR-0021, and that was retracted: a local mirror of this section
-is a second telling of AWS's specification, maintained by hand, which drifts
-silently and can never be authoritative about the thing it imitates (DR-0023). So
-a fault in the route set or the preflight surfaces after an apply rather than
-before one, and `just tf-validate` is as far as anything can be checked in
-advance.
+ahead of the authorizer, the 401 for a request with no token, and the parameter
+mapping that produces the `AuthContext` — is checked by exercising the deployed
+API, because it is behaviour AWS defines. It was reproduced locally for a time,
+under DR-0021, and that was retracted: a local mirror of this section is a second
+telling of AWS's specification, maintained by hand, which drifts silently and can
+never be authoritative about the thing it imitates (DR-0023). So a fault in the
+route set or the preflight surfaces after an apply rather than before one, and
+`just tf-validate` is as far as anything can be checked in advance.
+
+The mapping is the newest member of that list and the one worth naming: `just
+tf-validate` schema-checks it and cannot evaluate a `$context` expression. The
+check after an apply is that a `/api` call is attributed to the token's `sub`
+rather than to the development owner, and that `GET /health` still answers `ok`.
 
 **The authorizer's configuration is the exception, and is checkable before an
-apply.** `just dev-gateway` runs a thin adapter with the authorizer's verdict
-switched on: it resolves `issuer` and `audience` from the same two SSM parameters
-this layer reads them from, fetches the pool's keys from
+apply.** `just dev-gateway` runs a thin adapter that does nothing but reach the
+authorizer's verdict: it resolves `issuer` and `audience` from the same two SSM
+parameters this layer reads them from, fetches the pool's keys from
 `{issuer}/.well-known/jwks.json`, and accepts or refuses a real token the way
 `aws_apigatewayv2_authorizer.cognito` would — DR-0022. A refusal answers exactly
 what the deployed authorizer answers and prints the reason on its own terminal,
@@ -285,6 +319,16 @@ so a `grep` over `dist/*.wasm` tells a configured build from an unconfigured one
 without running either.
 
 ## Constraints
+
+- **`just tf-apply api` comes before `just deploy-api`, and the reverse order
+  misattributes every request.** The mapping and the binary that reads it are
+  two artefacts on two cadences (DR-0001), so one necessarily lands first.
+  Applying first is safe: the edge sets two headers the old binary ignores.
+  Deploying first is not: the new binary would find no `x-auth-edge` on any
+  request, read that as "no edge spoke", and attribute every user's writes to the
+  development owner — silently, with a 200, in exactly the way DR-0024 and
+  DR-0025 exist to prevent. This is the one deployment ordering in this project
+  that is unsafe rather than merely inconvenient, and nothing enforces it.
 
 - **CloudFront maps both 403 and 404 to `/index.html` with status 200.** Deep
   links are router paths, not files, so without this every reload on a non-root

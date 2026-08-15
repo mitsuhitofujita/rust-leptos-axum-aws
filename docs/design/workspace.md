@@ -1,11 +1,6 @@
 # Workspace
 
-Updated: 2026-08-13
-
-Note: `crates/devgateway`'s reduction to the thin adapter below is decided
-(DR-0023) and not yet carried out. The crate still holds the `local` and
-`passthrough` modes, the route table and the context builder that DR-0021 gave
-it. This document states the intended design.
+Updated: 2026-08-14
 
 ## Purpose
 
@@ -28,7 +23,7 @@ crates/
   server/             the axum API — compiled to the host target
   shared/             types crossing the boundary
   icongen/            generates the action-type icon catalog; ships nothing
-  devgateway/         stands in for the deployed edge locally; ships nothing
+  devgateway/         verifies a real Cognito token locally; ships nothing
 docs/                 this documentation (see docs/README.md)
 ```
 
@@ -50,10 +45,18 @@ converts it into the `AuthContext` the service reads (DR-0022, DR-0024). It sits
 in front of the unmodified service, forwarding what it accepts and refusing what
 it does not.
 
+It writes the same two headers the deployed edge's parameter mapping writes —
+`x-auth-subject` and `x-auth-edge` — and strips both on the way in, for the same
+reason API Gateway `overwrite:`s them. That the two arrangements produce the same
+`AuthContext` is what makes them interchangeable rather than two code paths
+(DR-0025).
+
 It is deliberately not a local API Gateway. It has no route table, answers no
 preflight, and does not reproduce the edge's behaviour in any other respect —
 that fidelity was tried, under DR-0021, and retracted as the wrong cost to carry
-against a specification AWS holds and can change (DR-0023). What survives from
+against a specification AWS holds and can change (DR-0023). Having no route table
+means examining no path at all, which is where it visibly differs from the
+deployment — see the constraint below. What survives from
 that decision is where the crate lives: **outside `crates/server`**, because in
 the deployment the component it stands in for is outside the service. It depends
 on nothing in the workspace — least of all on `crates/server`, which is the
@@ -138,12 +141,15 @@ the authorizer's verdict — is verified against real AWS instead, because
 reproducing it locally means maintaining a second telling of AWS's specification
 in this repository (DR-0023).
 
-**Two callers are a property of `dev-api`, not of the adapter.** Mock
-authentication takes a subject, so `just dev-api` can be one caller or another
-without a token, an adapter or AWS credentials, and the isolation
-`identity::Owner` provides stays checkable on a machine with none of them
-(DR-0024). An unnamed subject is the constant development owner, which is what
-keeps a fresh clone working with no configuration at all (DR-0018).
+**Two callers are a property of `dev-api`, not of the adapter.** The
+`AuthContext` is two headers, so `just dev-api` can be one caller or another by
+sending them — `x-auth-edge: curl` and `x-auth-subject: alice` — without a token,
+an adapter or AWS credentials, and the isolation `identity::Owner` provides stays
+checkable on a machine with none of them (DR-0024, DR-0025). There is no
+configuration variable and no mock mode: a request carrying neither header is the
+constant development owner, which is what keeps a fresh clone working with no
+configuration at all (DR-0018). A browser through trunk sends neither, so it is
+always the development owner.
 
 The `/api` proxy target lives in these recipes rather than in `Trunk.toml`,
 because there are two things it can point at — see the constraint below.
@@ -186,6 +192,13 @@ the `deploy-*` recipes that push the artefacts. Both sets belong to
   nothing to verify a bare name against, so comparing two partitions is
   `dev-api`'s mock authentication rather than anything the adapter offers —
   DR-0024.
+- **The adapter authorizes every path, `/health` included, and the deployment
+  does not.** The deployed probe is routed outside the authorizer; the adapter
+  has no route table, so through :3001 a probe with no token is a 401. Nothing in
+  `crates/devgateway` shows this divergence, because what would show it is an
+  exemption for one path — a one-line route table, and therefore the copy DR-0023
+  removed. It is stated here because this document is the only place it can be
+  found.
 - `just dynamo` must keep `-sharedDb`. Without it DynamoDB Local keeps a
   separate database per access key and region, so `dynamo-table` and
   `dev-api-dynamo` would create and query two different tables, both would

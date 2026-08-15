@@ -293,8 +293,12 @@ the durable layer being consistent afterwards, and each of these was run.
       deleted in `70170a2`. Two commits rather than one, so its reasoning
       reached a tree before the file left: the eight-property inventory is in
       DR-0023's Consequences, and nothing durable cited the file
-- [ ] Follow-on work opened or explicitly deferred — introducing `AuthContext`
+- [x] Follow-on work opened or explicitly deferred — introducing `AuthContext`
       across `crates/server` and the adapter, and reducing `crates/devgateway`.
-      Both are decided here and neither is built; two Work Logs, and this one
-      cannot retire before they exist, because the dated notes in `backend.md`
-      and `workspace.md` are the only record that the code has not caught up
+      Both are decided here and neither was built; two Work Logs, and this one
+      could not retire before they existed, because the dated notes in
+      `backend.md` and `workspace.md` were the only record that the code had not
+      caught up. Both logs now exist and both are built —
+      `2026-08-14-introducing-the-authcontext.md` and
+      `2026-08-14-reducing-the-devgateway.md` — and both dated notes are gone
+      from the Design Documents, which is what this item was really tracking

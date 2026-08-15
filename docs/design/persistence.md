@@ -3,8 +3,8 @@
 Updated: 2026-08-11
 
 Note: action types are stored. `crates/server` reads and writes the `TYPE#`
-half of this schema, and derives the partition key from the Cognito `sub` the
-authorizer validated (DR-0017). Action records are not — `GET /api/dashboard`
+half of this schema, and derives the partition key from the Cognito `sub` in the
+`AuthContext` the edge produced (DR-0024). Action records are not — `GET /api/dashboard`
 still answers from hardcoded values, so nothing has yet written a `RECORD#`
 item. Everything below about records describes the store the service is being
 written against; everything about action types describes what it does.

@@ -1,11 +1,6 @@
 # Backend
 
-Updated: 2026-08-13
-
-Note: the `AuthContext` boundary below is decided (DR-0024) and not yet built.
-`src/identity.rs` still parses `x-amzn-request-context` itself, in the shape
-DR-0017 described. This document states the intended design; the Work Log
-carrying out the change is the place to look for how far it has got.
+Updated: 2026-08-14
 
 ## Purpose
 
@@ -37,9 +32,18 @@ serving a partition its caller does not own. The value is the Cognito `sub`.
 
 It reads that subject from an `AuthContext` — the service's own description of
 who is calling — and from nothing else. Nothing in this crate names API Gateway,
-a request context, a JWT or a claim. Whatever speaks AWS's dialect converts it
-into an `AuthContext` first, in front of the service, because in the deployment
+a request context, a JWT or a claim, and the crate depends on neither `serde` nor
+`serde_json`, because there is nothing left to deserialise. Whatever speaks AWS's
+dialect converts it first, in front of the service, because in the deployment
 that component is in front of the service (DR-0024).
+
+The `AuthContext` arrives as two headers, and it is deliberately not a serialised
+object — the service parses nothing at all (DR-0025):
+
+| Header | Carries |
+| --- | --- |
+| `x-auth-subject` | The caller's Cognito `sub` |
+| `x-auth-edge` | Nothing. Its presence is the assertion that an edge handled this request |
 
 The service never validates a token, holds no JWT library, and has no public
 keys. API Gateway's JWT authorizer has already run and is the only enforcement
@@ -49,16 +53,27 @@ Three cases, and the difference between the last two is the point:
 
 | What arrives | Who the owner is |
 | --- | --- |
-| A readable `AuthContext` | Its subject |
-| No `AuthContext` at all | A constant development owner, or the subject the developer named — DR-0018, DR-0024 |
-| An `AuthContext` that cannot be read | Nobody. The request is refused |
+| `x-auth-edge`, and a non-empty `x-auth-subject` | That subject |
+| Neither header | A constant development owner — DR-0018 |
+| `x-auth-edge` with `x-auth-subject` absent or empty | Nobody. The request is refused with `401` |
 
 Absent means development: nothing in front asserted anything, so there is
 nothing to misread, and that is what makes `just dev-api` a working application
-with no configuration. Malformed means something in front *did* assert an
-identity and the service failed to understand it — treating that as "nobody said
+with no configuration. Marked-but-unnamed means something in front *did* assert
+an identity and the service failed to learn it — treating that as "nobody said
 anything" is how a write reaches the wrong partition silently, so it fails closed
 (DR-0024).
+
+`x-auth-edge` is what makes the distinction structural rather than inferred. With
+only a subject header, an edge that failed to produce one would be
+indistinguishable from no edge at all, and the failure would be a silent write
+into the development owner's partition (DR-0025).
+
+Being a particular caller under `just dev-api` is therefore both headers sent by
+hand — `x-auth-edge: curl` and `x-auth-subject: alice`. Two callers are one
+`curl` flag apart, with no token, no adapter and no AWS credentials, which is
+what makes owner isolation checkable at all locally. A subject without the edge
+header asserts nothing and is still the development owner.
 
 **The store.** `store::Store` is an enum with two variants, chosen from the
 environment at startup: `TABLE_NAME` set selects DynamoDB, unset selects an
@@ -110,8 +125,11 @@ under `/api` needs `local.api_methods` in `infra/api/apigateway.tf` to name it;
 a new path does not.
 
 **Depends on** `axum` and `tokio`, `aws-config` and `aws-sdk-dynamodb`,
-`ulid`, `time` for one formatted instant, `serde` and `serde_json` for the
-`AuthContext` and the request and response bodies, and `shared`.
+`ulid`, `time` for one formatted instant, and `shared`. Not `serde` or
+`serde_json`: both were declared for the request-context parsing that DR-0024
+removed, and nothing else in the crate names them. The `Json` extractor's own
+serialisation reaches it through `axum`, and the types it serialises derive their
+implementations in `shared`.
 
 **Reads** `TABLE_NAME` from the environment, and nothing else. The SDK reads its
 own variables underneath — the region, the credentials, and the
@@ -126,15 +144,16 @@ DynamoDB cost it no code (DR-0020).
   permissions cover every partition — so a handler that took an owner from a
   request parameter would defeat it entirely — DR-0010, DR-0024.
 - **Whatever carries the `AuthContext` into the service is not a security
-  boundary.** Anyone who could reach the service directly could forge it;
-  nothing can, because API Gateway is the only route to the function and
-  overwrites what it forwards on every request. Exposing the service by any
-  other path invalidates this — DR-0024.
-- **A missing `AuthContext` means development; an unreadable one means
+  boundary.** Anyone who could reach the service directly could forge both
+  headers; nothing can, because API Gateway is the only route to the function and
+  its mapping `overwrite:`s them on every request. `append:` in place of
+  `overwrite:` would silently end this, and exposing the service by any other
+  path invalidates it — DR-0024, DR-0025.
+- **A missing `AuthContext` means development; a marked one with no subject means
   rejection.** Neither occurs in a deployed function. If the first ever did, the
   write would land in the development owner's partition rather than failing —
-  DR-0018. The second exists so that a caller whose identity was asserted and
-  then lost is refused rather than quietly attributed to someone else — DR-0024.
+  DR-0018 — which is precisely why the deployed edge sets `x-auth-edge`
+  statically rather than relying on the subject mapping to resolve — DR-0025.
 - **`created_at` and the instant inside a record's sort key must be fixed-width
   RFC 3339 in UTC.** `store::TIMESTAMP` is the only thing enforcing it, and a
   variable-width instant fails silently — DR-0015.
