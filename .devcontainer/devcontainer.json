@@ -3,6 +3,28 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  // The devcontainer reaches the host's rootless podman socket rather than
+  // running its own engine. The source is podman's per-user socket path,
+  // usable directly because the container's UID (1000) already matches the
+  // host user's, so the mounted socket is readable and writable without a
+  // group. If the
+  // host ever runs podman as a system service instead, this has to move to
+  // /run/podman/podman.sock and the vscode user needs that group instead of
+  // relying on the UID match — `podman info --format
+  // '{{.Host.RemoteSocket.Path}}'` on the host is the authoritative way to
+  // find the real path. docs/work/2026-08-10-api-artefact-packaging.md has
+  // the reasoning.
+  "mounts": [
+    "source=/run/user/1000/podman/podman.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  // Mounted at the same path it lives at on the host, instead of the
+  // devcontainer default of /workspaces/<folder>, so a path handed to the
+  // engine through the socket above resolves to the same file on both sides.
+  // `deploy-api`'s `docker build` does not need this — its context is
+  // uploaded as a tar regardless of where either side mounts it — but a
+  // future `docker run -v` would.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+  "workspaceFolder": "${localWorkspaceFolder}",
   // The only port that has to leave the container. `trunk serve` listens on
   // 0.0.0.0:8080 (Trunk.toml) and proxies /api onward inside the container, so
   // the service on :3000, the token adapter on :3001 and DynamoDB Local on

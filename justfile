@@ -372,7 +372,6 @@ deploy-api:
     set -euo pipefail
 
     repository="$(just _ssm api/ecr_repository_url)"
-    function="$(just _ssm api/lambda_function_name)"
     registry="${repository%%/*}"
 
     # infra/api/Dockerfile builds crates/server on the same provided.al2023
@@ -381,6 +380,14 @@ deploy-api:
     aws ecr get-login-password | docker login --username AWS --password-stdin "${registry}"
     docker build -f infra/api/Dockerfile -t "${repository}:latest" .
     docker push "${repository}:latest"
+
+    # Resolved only now, not up front: the ECR repository outlives the first
+    # `terraform apply` on infra/api by design (deployment.md, "The ECR
+    # repository has to hold an image before `aws_lambda_function.api` can be
+    # created..."), so on that first bootstrap this name's SSM parameter does
+    # not exist yet. Resolving it here means the push above still lands before
+    # this recipe fails, which is what that apply is waiting on.
+    function="$(just _ssm api/lambda_function_name)"
 
     aws lambda update-function-code \
         --function-name "${function}" \
