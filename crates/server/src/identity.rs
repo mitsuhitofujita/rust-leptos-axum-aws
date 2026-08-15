@@ -2,118 +2,170 @@
 //!
 //! The service never validates a token. API Gateway's JWT authorizer has
 //! already done it, and it is the only enforcement point there is (DR-0010).
-//! What reaches the function is the authorizer's conclusion: the claims, inside
-//! the request context of the event.
+//! What reaches the function is the authorizer's conclusion — but not in AWS's
+//! shape. Whatever sits in front converts it into an [`AuthContext`] first, and
+//! that is the only description of a caller this crate has (DR-0024).
 //!
-//! `crates/server` is an ordinary axum binary and never sees that event —
-//! the Lambda Web Adapter turns it into an HTTP request and puts the request
-//! context back on as the `x-amzn-request-context` header, serialised as JSON.
-//! So the subject arrives as a header, and reading it is all this does.
+//! Nothing here names API Gateway, a request context, a JWT or a claim. In the
+//! deployment the conversion is API Gateway's own request parameter mapping, and
+//! locally it is `crates/devgateway`; both produce the same two headers, which
+//! is what makes them interchangeable rather than two code paths (DR-0025).
 //!
 //! Nothing here is a security boundary. A header can be forged by anyone who
 //! can reach the service directly; what makes that irrelevant is that nothing
-//! can — API Gateway is the only route to the function, and it overwrites this
-//! header on every request.
-
-use std::collections::HashMap;
-use std::convert::Infallible;
+//! can — API Gateway is the only route to the function, and its mapping
+//! overwrites both headers on every request.
 
 use axum::extract::FromRequestParts;
-use axum::http::HeaderMap;
 use axum::http::request::Parts;
-use serde::Deserialize;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 
-/// The header the Lambda Web Adapter carries the API Gateway request context in.
-const REQUEST_CONTEXT: &str = "x-amzn-request-context";
+/// The caller's subject, as whatever is in front of the service asserts it.
+const SUBJECT: &str = "x-auth-subject";
+
+/// Set by whatever is in front of the service, to a value nobody reads.
+///
+/// Its presence is the whole of its meaning: it says an edge handled this
+/// request. Without it, a [`SUBJECT`] that failed to arrive would be
+/// indistinguishable from no edge at all, and a request the edge could not name
+/// would be attributed to [`DEVELOPMENT_OWNER`] rather than refused — DR-0025.
+const EDGE: &str = "x-auth-edge";
 
 /// Who owns the items a request reads and writes when nothing says otherwise.
 ///
-/// There is no header under `just dev-api`: no API Gateway, no authorizer, and
-/// no token — the SPA is not even configured to obtain one unless
+/// There is no edge under `just dev-api`: no API Gateway, no authorizer, and no
+/// token — the SPA is not even configured to obtain one unless
 /// `just dev-web-auth` is what started it. An unset value meaning something
 /// workable rather than something broken is the same choice DR-0008 makes for
-/// the frontend's configuration, and this is its equivalent here.
+/// the frontend's configuration, and this is its equivalent here (DR-0018).
 ///
 /// It is a partition key like any other, so development data sits beside real
 /// data without mixing with it. In a deployed function this is unreachable:
-/// every request arrives through the authorizer, which is what puts the header
-/// there.
+/// every request arrives through the edge, which is what sets [`EDGE`].
 const DEVELOPMENT_OWNER: &str = "development";
 
-/// The Cognito subject of whoever made the request.
+/// What the service knows about whoever made the request.
 ///
-/// A `sub` rather than an email address: it is what the token asserts, and
-/// unlike an address it does not change (DR-0015).
+/// One field, because one field is what a handler uses. DR-0024 describes this
+/// as "a subject, and whatever else a handler genuinely uses", and nothing yet
+/// uses anything else.
+pub struct AuthContext {
+    /// The Cognito subject. A `sub` rather than an email address: it is what the
+    /// token asserts, and unlike an address it does not change (DR-0015).
+    pub subject: String,
+}
+
+/// The owner of everything a request touches.
 pub struct Owner(pub String);
 
 impl<S: Send + Sync> FromRequestParts<S> for Owner {
-    /// This never rejects. A request with no request context is a request from
-    /// a developer's own machine, and [`DEVELOPMENT_OWNER`] is who that is.
-    type Rejection = Infallible;
+    type Rejection = NoSubject;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Ok(Self(
-            subject(&parts.headers).unwrap_or_else(|| DEVELOPMENT_OWNER.to_owned()),
-        ))
+        match context(&parts.headers) {
+            Caller::Known(context) => Ok(Self(context.subject)),
+            Caller::Developer => Ok(Self(DEVELOPMENT_OWNER.to_owned())),
+            Caller::Unreadable => Err(NoSubject),
+        }
     }
 }
 
-fn subject(headers: &HeaderMap) -> Option<String> {
-    let context = headers.get(REQUEST_CONTEXT)?.to_str().ok()?;
-    let context: RequestContext = serde_json::from_str(context).ok()?;
-    context.authorizer?.jwt?.claims.remove("sub")
-}
-
-/// As much of the API Gateway HTTP API request context as the subject needs.
+/// An edge asserted an identity and the service could not read it.
 ///
-/// The adapter serialises `lambda_http`'s own `RequestContext`, which is
-/// `#[serde(untagged)]`, so an HTTP API's context is the whole of the JSON
-/// rather than a variant inside it. Everything not named here is ignored, which
-/// is nearly all of it.
-#[derive(Deserialize)]
-struct RequestContext {
-    authorizer: Option<Authorizer>,
+/// Answered `401` rather than absorbed. Treating it as "nobody said anything"
+/// is how a write reaches the wrong partition silently, and that is the failure
+/// DR-0024 exists to remove.
+pub struct NoSubject;
+
+impl IntoResponse for NoSubject {
+    fn into_response(self) -> Response {
+        (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
+    }
 }
 
-#[derive(Deserialize)]
-struct Authorizer {
-    jwt: Option<Jwt>,
+enum Caller {
+    Known(AuthContext),
+    /// Nothing in front asserted anything, so there is nothing to misread.
+    Developer,
+    /// Something in front did assert, and what arrived is not a subject.
+    Unreadable,
 }
 
-#[derive(Deserialize)]
-struct Jwt {
-    claims: HashMap<String, String>,
+/// The three cases, and the difference between the last two is the point.
+fn context(headers: &HeaderMap) -> Caller {
+    if !headers.contains_key(EDGE) {
+        return Caller::Developer;
+    }
+
+    // An empty value is what an edge produces when it has an identity to assert
+    // and cannot name it, so it is unreadable rather than absent.
+    match headers.get(SUBJECT).and_then(|value| value.to_str().ok()) {
+        Some(subject) if !subject.is_empty() => Caller::Known(AuthContext {
+            subject: subject.to_owned(),
+        }),
+        _ => Caller::Unreadable,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn reads_the_subject_from_the_request_context() {
+    fn headers(pairs: &[(&'static str, &str)]) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            REQUEST_CONTEXT,
-            r#"{"accountId":"1","authorizer":{"jwt":{"claims":{"sub":"abc-123","client_id":"x"},"scopes":null}}}"#
-                .parse()
-                .unwrap(),
+        for (name, value) in pairs {
+            headers.insert(*name, value.parse().unwrap());
+        }
+        headers
+    }
+
+    fn owner(pairs: &[(&'static str, &str)]) -> Option<String> {
+        match context(&headers(pairs)) {
+            Caller::Known(context) => Some(context.subject),
+            Caller::Developer => Some(DEVELOPMENT_OWNER.to_owned()),
+            Caller::Unreadable => None,
+        }
+    }
+
+    #[test]
+    fn reads_the_subject_the_edge_asserted() {
+        assert_eq!(
+            owner(&[(EDGE, "apigateway"), (SUBJECT, "abc-123")]).as_deref(),
+            Some("abc-123")
         );
-
-        assert_eq!(subject(&headers).as_deref(), Some("abc-123"));
     }
 
+    /// DR-0018, unchanged: a request nothing spoke for is a developer's own.
     #[test]
-    fn has_no_subject_without_the_header() {
-        assert_eq!(subject(&HeaderMap::new()), None);
+    fn a_request_no_edge_touched_is_the_development_owner() {
+        assert_eq!(owner(&[]).as_deref(), Some(DEVELOPMENT_OWNER));
     }
 
-    /// `/health` is routed outside the authorizer, so a context with no
-    /// authorizer at all is a shape that really arrives.
+    /// The case this whole boundary exists to make expressible. An edge said it
+    /// had a caller and did not name them, which must not become a write into
+    /// the development owner's partition.
     #[test]
-    fn has_no_subject_when_the_context_carries_no_authorizer() {
-        let mut headers = HeaderMap::new();
-        headers.insert(REQUEST_CONTEXT, r#"{"accountId":"1"}"#.parse().unwrap());
+    fn an_edge_that_named_nobody_is_refused() {
+        assert_eq!(owner(&[(EDGE, "apigateway")]), None);
+    }
 
-        assert_eq!(subject(&headers), None);
+    /// The same failure with the header present but empty, which is what a
+    /// mapping that resolved to nothing produces.
+    #[test]
+    fn an_edge_that_named_an_empty_subject_is_refused() {
+        assert_eq!(owner(&[(EDGE, "apigateway"), (SUBJECT, "")]), None);
+    }
+
+    /// An unmarked request is a developer's however it is dressed: the subject
+    /// header alone asserts nothing, because nothing claimed to have handled the
+    /// request. Being `alice` under `just dev-api` therefore means sending both
+    /// headers, which is the whole of what mock authentication is.
+    #[test]
+    fn a_subject_without_an_edge_is_still_the_development_owner() {
+        assert_eq!(
+            owner(&[(SUBJECT, "alice")]).as_deref(),
+            Some(DEVELOPMENT_OWNER)
+        );
     }
 }

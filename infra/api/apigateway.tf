@@ -22,11 +22,54 @@ resource "aws_apigatewayv2_api" "this" {
   }
 }
 
-resource "aws_apigatewayv2_integration" "lambda" {
+# Two integrations to one function, differing only in the headers they map.
+#
+# crates/server reads an AuthContext of its own — a subject, and a marker saying
+# an edge produced it — and knows nothing about API Gateway, a request context or
+# a claim (DR-0024). This is where that conversion happens: parameter mapping is
+# AWS's own mechanism, so nothing here re-implements AWS behaviour, and it runs in
+# the component that is already in front of the service (DR-0025).
+#
+# `overwrite:` is load-bearing. The service trusts these headers only because
+# nothing but the edge can set them, and that is true only because the edge
+# replaces whatever the caller sent on every request.
+resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.this.id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.api.invoke_arn
   payload_format_version = "2.0"
+
+  request_parameters = {
+    # The authorizer has already run, so this always resolves. If it ever did
+    # not, API Gateway would skip the mapping and the subject would simply be
+    # absent — which is why the marker below is set separately and statically.
+    "overwrite:header.x-auth-subject" = "$context.authorizer.claims.sub"
+
+    # Nothing reads the value; its presence is the assertion. It is what lets the
+    # service tell "no edge spoke, so this is a developer" from "an edge spoke
+    # and could not name the caller, so refuse" — DR-0025.
+    "overwrite:header.x-auth-edge" = "apigateway"
+  }
+}
+
+# /health runs outside the authorizer, where $context.authorizer.claims.sub
+# cannot resolve. A skipped mapping leaves a caller's own header in place, so
+# this integration removes both rather than mapping either — the probe reaches
+# the service with no AuthContext at all, which is what it should have.
+resource "aws_apigatewayv2_integration" "health" {
+  api_id                 = aws_apigatewayv2_api.this.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  payload_format_version = "2.0"
+
+  # The value of a `remove:` mapping is a literal pair of single quotes, which is
+  # how AWS spells "no value" here. An actual empty string is sent as null, and
+  # API Gateway drops the mapping instead of storing it — which plans as a change
+  # that applies cleanly and is still pending the next time.
+  request_parameters = {
+    "remove:header.x-auth-subject" = "''"
+    "remove:header.x-auth-edge"    = "''"
+  }
 }
 
 # Validates Cognito access tokens. `audience` is the app client id, which is
@@ -58,7 +101,7 @@ resource "aws_apigatewayv2_route" "api" {
 
   api_id             = aws_apigatewayv2_api.this.id
   route_key          = "${each.value} /api/{proxy+}"
-  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
@@ -68,7 +111,7 @@ resource "aws_apigatewayv2_route" "api" {
 resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.this.id
   route_key = "GET /health"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.health.id}"
 }
 
 resource "aws_cloudwatch_log_group" "api_gateway" {

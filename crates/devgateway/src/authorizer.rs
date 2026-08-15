@@ -1,21 +1,15 @@
-//! The half of the stand-in that plays `aws_apigatewayv2_authorizer.cognito`.
+//! The half of the adapter that plays `aws_apigatewayv2_authorizer.cognito`.
 //!
-//! It has two behaviours, and which one is in force is the only difference
-//! between `local` mode and `cognito` mode.
+//! It does what the deployed authorizer does: RS256 against the pool's published
+//! key, then `iss`, `exp` and the audience — DR-0022. Nothing here is a security
+//! boundary. It exists so that a wrong `jwt_configuration` in
+//! `infra/api/apigateway.tf` is visible before an apply instead of arriving
+//! afterwards as a 401 indistinguishable from a broken sign-in.
 //!
-//! **Without a [`Verifier`] it decodes and does not verify.** That is enough to
-//! exercise everything downstream of the authorizer — the request context, the
-//! subject, the isolation `identity::Owner` provides — and says nothing about
-//! whether the deployed authorizer would have accepted the same token. It is
-//! also what makes `Bearer alice` and `Bearer bob` two callers, which no
-//! verifying mode can offer.
-//!
-//! **With one it does what the deployed authorizer does**: RS256 against the
-//! pool's published key, then `iss`, `exp` and the audience — DR-0022. Nothing
-//! here is a security boundary even then. It exists so that a wrong
-//! `jwt_configuration` in `infra/api/apigateway.tf` is visible before an apply
-//! instead of arriving afterwards as a 401 indistinguishable from a broken
-//! sign-in.
+//! There is no mode in which a token is decoded without being verified. That
+//! existed to make `Bearer alice` and `Bearer bob` two callers, and DR-0024
+//! moved that affordance to `just dev-api`, where the two `AuthContext` headers
+//! say the same thing without a token, an adapter or the network.
 //!
 //! Every refusal is the same refusal: the caller is told `401
 //! {"message":"Unauthorized"}` and nothing else, exactly as the deployed
@@ -33,27 +27,24 @@ use crate::config::Verification;
 use crate::jwks::Keys;
 
 pub enum Authorization {
-    /// The claims the authorizer concluded with, before they are stringified.
+    /// The claims the authorizer concluded with, which the `AuthContext` is
+    /// built from.
     Allowed(Map<String, Value>),
-    /// No token, or — in `cognito` mode — one that did not verify. The deployed
-    /// authorizer answers 401 and the function is never invoked; so does this.
+    /// No token, or one that did not verify. The deployed authorizer answers 401
+    /// and the function is never invoked; so does this.
     Refused,
 }
 
-/// What `cognito` mode carries: the deployed authorizer's configuration, and
-/// the keys the pool publishes.
+/// What the adapter verifies against: the deployed authorizer's configuration,
+/// and the keys the pool publishes.
 pub struct Verifier {
     pub verification: Verification,
     pub keys: Keys,
 }
 
-pub fn authorize(parts: &Parts, verifier: Option<&Verifier>) -> Authorization {
+pub fn authorize(parts: &Parts, verifier: &Verifier) -> Authorization {
     let Some(token) = bearer(parts) else {
         return Authorization::Refused;
-    };
-
-    let Some(verifier) = verifier else {
-        return decoded(token);
     };
 
     match verifier.verified(token, unix_time()) {
@@ -80,49 +71,6 @@ fn bearer(parts: &Parts) -> Option<&str> {
     (!token.is_empty()).then_some(token)
 }
 
-/// `local` mode: whatever the bearer value claims, taken at its word.
-fn decoded(token: &str) -> Authorization {
-    match claims(token) {
-        Some(claims) => {
-            if !claims.contains_key("sub") {
-                println!(
-                    "devgateway: the token carries no `sub`; \
-                     the service will fall back to its development owner"
-                );
-            }
-            Authorization::Allowed(claims)
-        }
-        // Not a JWT, so the bearer value is taken as the subject itself:
-        // `Bearer alice` is a caller named alice. That is what makes two callers
-        // expressible without two sign-ins, and checking that one cannot see the
-        // other's items is the whole reason `identity::Owner` exists.
-        //
-        // A real token that failed to decode lands here too, and its subject is
-        // then the whole token — visible in the partition rather than silent.
-        None => {
-            let mut claims = Map::new();
-            claims.insert("sub".to_owned(), Value::String(token.to_owned()));
-            Authorization::Allowed(claims)
-        }
-    }
-}
-
-/// The payload of a JWT, read without verifying anything about it.
-fn claims(token: &str) -> Option<Map<String, Value>> {
-    let mut segments = token.split('.');
-    let (_header, payload, _signature) = (segments.next()?, segments.next()?, segments.next()?);
-
-    if segments.next().is_some() {
-        return None;
-    }
-
-    let payload = URL_SAFE_NO_PAD.decode(payload).ok()?;
-    match serde_json::from_slice(&payload).ok()? {
-        Value::Object(claims) => Some(claims),
-        _ => None,
-    }
-}
-
 impl Verifier {
     /// The deployed authorizer's checks, in the order it is worth doing them.
     ///
@@ -137,8 +85,9 @@ impl Verifier {
             segments.next(),
         ) else {
             return Err(
-                "the bearer value is not a JWT. `Bearer alice` is a `local` mode \
-                 affordance; `cognito` mode has nothing to verify it against"
+                "the bearer value is not a JWT. There is nothing to verify a bare \
+                 name against; `Bearer alice` is `just dev-api` and its two \
+                 AuthContext headers, not this adapter"
                     .to_owned(),
             );
         };
@@ -228,7 +177,7 @@ impl Verifier {
     /// `jwt_configuration.audience` holds the app client id, and the claim it
     /// arrives in depends on which token the SPA sent: a Cognito **access**
     /// token carries it as `client_id`, an **id** token as `aud`. API Gateway
-    /// accepts either, so a stand-in that looked only at `aud` would refuse what
+    /// accepts either, so an adapter that looked only at `aud` would refuse what
     /// the deployment accepts, and one that looked only at `client_id` would
     /// accept what it refuses. Both mistakes are invisible until an apply.
     ///
@@ -326,27 +275,25 @@ mod tests {
         request.body(()).unwrap().into_parts().0
     }
 
-    fn allowed(authorization: Option<&str>) -> Map<String, Value> {
-        match authorize(&parts(authorization), None) {
-            Authorization::Allowed(claims) => claims,
-            Authorization::Refused => panic!("expected the request to be authorized"),
-        }
-    }
-
-    /// A token this stand-in built, so the test does not depend on a real one.
-    fn token(payload: &str) -> String {
-        format!(
-            "{}.{}.{}",
-            URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","kid":"local"}"#),
-            URL_SAFE_NO_PAD.encode(payload),
-            URL_SAFE_NO_PAD.encode("not a signature"),
+    /// A well-formed access token whose `exp` is against the real clock, which
+    /// is the one `authorize` reads. Everything below `verified` takes its clock
+    /// as an argument and uses [`testkey::NOW`] instead.
+    fn current_token() -> String {
+        testkey::sign(
+            &format!(r#"{{"alg":"RS256","kid":"{}"}}"#, testkey::KID),
+            &format!(
+                r#"{{"sub":"abc-123","iss":"{}","client_id":"{}","token_use":"access","exp":{}}}"#,
+                testkey::ISSUER,
+                testkey::AUDIENCE,
+                unix_time() + 3600,
+            ),
         )
     }
 
     #[test]
     fn refuses_a_request_with_no_authorization_header() {
         assert!(matches!(
-            authorize(&parts(None), None),
+            authorize(&parts(None), &verifier()),
             Authorization::Refused
         ));
     }
@@ -354,66 +301,22 @@ mod tests {
     #[test]
     fn refuses_an_empty_authorization_header() {
         assert!(matches!(
-            authorize(&parts(Some("Bearer ")), None),
+            authorize(&parts(Some("Bearer ")), &verifier()),
             Authorization::Refused
         ));
-    }
-
-    #[test]
-    fn reads_the_claims_of_a_jwt_without_verifying_it() {
-        let claims = allowed(Some(&format!(
-            "Bearer {}",
-            token(r#"{"sub":"abc-123","client_id":"x"}"#)
-        )));
-
-        assert_eq!(
-            claims.get("sub"),
-            Some(&Value::String("abc-123".to_owned()))
-        );
-    }
-
-    /// The signature is never looked at, which is the whole of what this mode
-    /// does not do. `cognito` mode, below, is the one that rejects this.
-    #[test]
-    fn accepts_a_jwt_whose_signature_is_nonsense() {
-        let mut token = token(r#"{"sub":"abc-123"}"#);
-        token.push_str("tampered");
-
-        let claims = allowed(Some(&format!("Bearer {token}")));
-
-        assert_eq!(
-            claims.get("sub"),
-            Some(&Value::String("abc-123".to_owned()))
-        );
-    }
-
-    /// Two callers without two sign-ins, which is what makes the isolation
-    /// `identity::Owner` provides checkable by hand for the first time.
-    #[test]
-    fn a_bearer_value_that_is_not_a_jwt_is_the_subject_itself() {
-        assert_eq!(
-            allowed(Some("Bearer alice")).get("sub"),
-            Some(&Value::String("alice".to_owned()))
-        );
-        assert_eq!(
-            allowed(Some("Bearer bob")).get("sub"),
-            Some(&Value::String("bob".to_owned()))
-        );
     }
 
     /// The prefix is optional at the deployed authorizer's identity source, so a
     /// bare token is a caller here too.
     #[test]
     fn accepts_a_token_without_the_bearer_prefix() {
-        let claims = allowed(Some(&token(r#"{"sub":"abc-123"}"#)));
-
-        assert_eq!(
-            claims.get("sub"),
-            Some(&Value::String("abc-123".to_owned()))
-        );
+        assert!(matches!(
+            authorize(&parts(Some(&current_token())), &verifier()),
+            Authorization::Allowed(_)
+        ));
     }
 
-    // --- cognito mode ------------------------------------------------------
+    // --- the verdict --------------------------------------------------------
     //
     // Every case below signs with the committed fixture key and is checked
     // against a fixed clock, so nothing here depends on a real pool, on the
@@ -472,8 +375,8 @@ mod tests {
     }
 
     /// The other half of the audience rule. API Gateway accepts either, so this
-    /// stand-in has to as well — the point being that a stand-in checking only
-    /// one of the two claims would be silently wrong in one direction.
+    /// adapter has to as well — the point being that one checking only one of
+    /// the two claims would be silently wrong in one direction.
     #[test]
     fn an_id_token_carrying_the_app_client_in_aud_is_allowed() {
         assert!(verify(&id_token()).is_ok());
@@ -496,7 +399,8 @@ mod tests {
         assert!(verify(&token).is_ok());
     }
 
-    /// The one thing `local` mode cannot do, and the reason this mode exists.
+    /// The check that makes this adapter worth running: everything else about
+    /// the token is well formed and every other check passes.
     #[test]
     fn a_token_whose_signature_was_tampered_with_is_refused() {
         let token = access_token();
@@ -510,18 +414,11 @@ mod tests {
 
         let error = verify(&tampered).unwrap_err();
         assert!(error.contains("signature"), "{error}");
-
-        // And the same token is accepted by `local` mode, which is the whole
-        // difference between the two.
-        assert!(matches!(
-            authorize(&parts(Some(&format!("Bearer {tampered}"))), None),
-            Authorization::Allowed(_)
-        ));
     }
 
     /// Changing a claim invalidates the signature, so the payload cannot be
     /// edited without the key either — which is what makes the claims the
-    /// service acts on trustworthy in this mode.
+    /// service acts on trustworthy.
     #[test]
     fn a_token_whose_subject_was_swapped_is_refused() {
         let token = access_token();
@@ -641,17 +538,10 @@ mod tests {
 
         // The fixed clock does not reach `authorize`, which reads the real one,
         // so the token has to be valid now as well as at `testkey::NOW`.
-        let token = testkey::sign(
-            &format!(r#"{{"alg":"RS256","kid":"{}"}}"#, testkey::KID),
-            &format!(
-                r#"{{"sub":"abc-123","iss":"{}","client_id":"{}","token_use":"access","exp":{}}}"#,
-                testkey::ISSUER,
-                testkey::AUDIENCE,
-                unix_time() + 3600,
-            ),
-        );
-
-        match authorize(&parts(Some(&format!("Bearer {token}"))), Some(&verifier)) {
+        match authorize(
+            &parts(Some(&format!("Bearer {}", current_token()))),
+            &verifier,
+        ) {
             Authorization::Allowed(claims) => assert_eq!(
                 claims.get("sub"),
                 Some(&Value::String("abc-123".to_owned()))
@@ -662,20 +552,19 @@ mod tests {
         // And the fixed-clock one is refused through the same path, because its
         // `exp` is years in the past by the time anyone runs this.
         assert!(matches!(
-            authorize(&parts(Some(&header)), Some(&verifier)),
+            authorize(&parts(Some(&header)), &verifier),
             Authorization::Refused
         ));
     }
 
-    /// The trade-off `cognito` mode makes against `local` mode, stated as a
-    /// test so that it is a decision rather than a surprise: there is nothing to
-    /// verify a bare name against, so the two-callers-one-curl-flag affordance
-    /// does not exist here.
+    /// Stated as a test so that it is a decision rather than a surprise: there
+    /// is nothing to verify a bare name against, so the two-callers-one-curl-flag
+    /// affordance is `just dev-api`'s and not this adapter's — DR-0024.
     #[test]
-    fn bearer_alice_is_refused_in_cognito_mode() {
+    fn a_bare_name_is_refused() {
         let error = verify("alice").unwrap_err();
 
         assert!(error.contains("not a JWT"), "{error}");
-        assert!(error.contains("local"), "{error}");
+        assert!(error.contains("dev-api"), "{error}");
     }
 }

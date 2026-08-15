@@ -1,7 +1,7 @@
 //! The user pool's signing keys, and the one thing done with them.
 //!
 //! Cognito publishes them at `{issuer}/.well-known/jwks.json`, which is the same
-//! document `aws_apigatewayv2_authorizer.cognito` reads and the reason this mode
+//! document `aws_apigatewayv2_authorizer.cognito` reads and the reason the fetch
 //! needs no AWS credentials: the endpoint is public. Credentials are needed to
 //! learn the issuer, not to fetch this.
 //!
@@ -43,7 +43,7 @@ impl Keys {
     /// Read a JWKS document.
     ///
     /// Entries that are not RS256 RSA keys are skipped rather than refused: a
-    /// pool is free to publish others, and this stand-in mirrors an authorizer
+    /// pool is free to publish others, and this adapter mirrors an authorizer
     /// that only ever validates RS256. A document from which nothing survives is
     /// an error, because it is indistinguishable in effect from a wrong URL and
     /// would otherwise surface much later as an unexplained 401.

@@ -17,8 +17,8 @@ icons:
 
 # Where `trunk serve` sends /api. Trunk.toml holds no [[proxy]] block, because
 # there are two things it could point at and trunk appends a CLI backend to the
-# file's entries rather than overriding them — see DR-0021. So each recipe below
-# names the one it wants: the service directly, or the edge stand-in.
+# file's entries rather than overriding them — see DR-0023. So each recipe below
+# names the one it wants: the service directly, or the token adapter.
 api_backend := "http://127.0.0.1:3000/api"
 gateway_backend := "http://127.0.0.1:3001/api"
 
@@ -164,47 +164,24 @@ dev-api-dynamo:
     AWS_SECRET_ACCESS_KEY=local \
         cargo run -p server
 
-# --- Local verification against the deployed edge ---------------------------
+# --- Local verification of a real Cognito token -----------------------------
 #
-# Between the browser and crates/server in a deployed request sit an API Gateway
-# HTTP API and the Lambda Web Adapter. Their route table, their preflight answer,
-# their 401, and the x-amzn-request-context header they put on every request are
-# decided in infra/api/apigateway.tf and are unobservable here. crates/devgateway
-# stands in for them, in front of the unmodified service — DR-0021.
+# crates/devgateway answers one question: would the deployed authorizer accept
+# this token? It sits in front of the unmodified service, verifies the token the
+# way aws_apigatewayv2_authorizer.cognito verifies it, converts what it accepts
+# into the AuthContext the service reads, and refuses the rest — DR-0022,
+# DR-0024, DR-0025.
+#
+# It reproduces nothing else about API Gateway. The route table, the preflight
+# and the 401 for an unrouted method were reproduced here once and retracted,
+# because each was a second telling of a specification AWS holds — DR-0023.
 #
 # Three terminals when this is in use: dev-api, dev-gateway, dev-web-gateway.
 # Nothing about the two-terminal default changes if it never is.
 
-# Three modes, and the default is the one that needs nothing.
-#
-# `local` reproduces the edge: only GET and POST exist under /api and anything
-# else is a 404, OPTIONS is answered here, /api without an Authorization header
-# is a 401, and the request context is written by this process — any copy the
-# caller sent is discarded first, which is what DR-0017 relies on API Gateway
-# doing. Any bearer value works: a JWT is decoded without being verified, and
-# anything else is taken as the subject itself, so `Bearer alice` and
-# `Bearer bob` are two callers and one cannot see the other's items.
-#
-# `cognito` (dev-gateway-cognito below) is `local` plus the authorizer's actual
-# verdict.
-#
-# `passthrough` (DEVGATEWAY_MODE=passthrough) reproduces nothing and discards
-# nothing. It is what `just dev-api` on its own already does, forged header and
-# all, and it is here so the difference can be seen.
-#
-# A dev-web bundle sends no Authorization header at all (DR-0008), so behind this
-# every /api call is a 401 — which is deployment.md's constraint about a bundle
-# built without the Cognito variables, reproduced locally. Use dev-web-auth for a
-# browser session with a real token.
-
-# The API Gateway + Lambda Web Adapter stand-in on http://localhost:3001.
-dev-gateway:
-    cargo run -p devgateway
-
-# Everything `local` does, and the token is verified the way the deployed
-# authorizer verifies it: RS256 against the pool's published keys, then `iss`,
-# `exp`, and the app client id — which a Cognito access token carries in
-# `client_id` and an id token in `aud`. DR-0022.
+# The token is verified the way the deployed authorizer verifies it: RS256
+# against the pool's published keys, then `iss`, `exp`, and the app client id —
+# which a Cognito access token carries in `client_id` and an id token in `aud`.
 #
 # What it is for is infra/api/apigateway.tf, not the service. The two values
 # below are the authorizer's `jwt_configuration`, resolved from the same SSM
@@ -212,23 +189,32 @@ dev-gateway:
 # than as a 401 after an apply. Set DEVGATEWAY_AUDIENCE by hand to something else
 # to watch a good token be refused.
 #
+# Every path needs a token, /health included: there is no route table here, so
+# the probe is authorized like anything else and answers 401 through :3001 where
+# the deployment answers ok. `Bearer alice` does not work either — two callers
+# without a token is dev-api and its two AuthContext headers.
+#
+# A dev-web bundle sends no Authorization header at all (DR-0008), so behind this
+# every /api call is a 401 — which is deployment.md's constraint about a bundle
+# built without the Cognito variables, reproduced locally. Use dev-web-auth for a
+# browser session with a real token.
+#
 # Needs AWS credentials for SSM and network for the JWKS, and neither afterwards.
 # The key set is fetched once before the listener binds; a pool that has rotated
-# its keys since means restarting this. `Bearer alice` does not work here.
+# its keys since means restarting this.
 
-# The same stand-in, verifying real Cognito tokens. Needs AWS credentials.
-dev-gateway-cognito:
+# The deployed authorizer on http://localhost:3001. Needs AWS credentials.
+dev-gateway:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    DEVGATEWAY_MODE=cognito \
     DEVGATEWAY_ISSUER="$(just _ssm identity/user_pool_issuer)" \
     DEVGATEWAY_AUDIENCE="$(just _ssm identity/app_client_id)" \
         cargo run -p devgateway
 
-# Needs `dev-gateway` or `dev-gateway-cognito` running as well as `dev-api`.
+# Needs `dev-gateway` running as well as `dev-api`.
 
-# The dev server with /api going through the stand-in rather than to the service.
+# The dev server with /api going through the adapter rather than to the service.
 dev-web-gateway:
     trunk serve --proxy-backend {{gateway_backend}}
 

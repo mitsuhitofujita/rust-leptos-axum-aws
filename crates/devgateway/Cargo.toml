@@ -10,11 +10,11 @@ axum.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
 
 # The forwarding leg. hyper's own client rather than a high-level one: the target
-# is plain HTTP on loopback, so that leg wants no TLS — DR-0021. The features
+# is plain HTTP on loopback, so that leg wants no TLS — DR-0023. The features
 # named here are what pull in hyper itself; it is never referred to by name.
 hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
 
-# The one outbound call that is not loopback: the JWKS fetch in `cognito` mode.
+# The one outbound call that is not loopback: the JWKS fetch at startup.
 # `rustls-native-certs` rather than a bundled root store, so the trust anchors
 # are the image's own /etc/ssl/certs — the same ones curl and the AWS CLI use,
 # and one fewer thing to keep current. `aws-lc-rs` is named explicitly because
@@ -28,7 +28,7 @@ hyper-rustls = { workspace = true, features = [
 ] }
 aws-lc-rs.workspace = true
 
-# The request context this writes, and the token payload it reads.
+# The key set this reads, and the token payload it verifies.
 serde.workspace = true
 serde_json.workspace = true
 base64.workspace = true
