@@ -3,6 +3,29 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  // The only port that has to leave the container. `trunk serve` listens on
+  // 0.0.0.0:8080 (Trunk.toml) and proxies /api onward inside the container, so
+  // the service on :3000, the token adapter on :3001 and DynamoDB Local on
+  // :8000 stay on 127.0.0.1 and are reached through it.
+  //
+  // `appPort` rather than `forwardPorts`: this publishes the port when the
+  // container is created, so it holds for a plain `exec` shell as well, where
+  // forwardPorts — a client-side feature of the editor — does nothing.
+  //
+  // The host port is pinned to 8080 rather than assigned, because the app
+  // client's callback and logout URLs name `http://localhost:8080/` and
+  // crates/app computes its redirect URI from window.location.origin. On any
+  // other host port `just dev-web-auth` reaches the hosted UI and is refused.
+  "appPort": [
+    "127.0.0.1:8080:8080",
+    "127.0.0.1:3000:3000"
+  ],
+  // AWS CLI v2 pages its output through $PAGER, defaulting to `less`, which
+  // this image does not install. Empty means print and exit — which is what
+  // every `aws` call in the justfile expects, none of them being interactive.
+  "containerEnv": {
+    "AWS_PAGER": ""
+  },
   "remoteUser": "vscode",
   "customizations": {
     "vscode": {
