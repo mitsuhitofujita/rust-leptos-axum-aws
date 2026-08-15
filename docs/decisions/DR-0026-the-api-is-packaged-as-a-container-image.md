@@ -22,9 +22,6 @@ highest versioned symbol was `GLIBC_2.34` exactly: the native build was safe
 by coincidence, not by anything that enforced it, and `docs/design/deployment.md`
 had already recorded that coincidence as the entire basis of its safety.
 
-The full investigation, including the two rejected packaging alternatives
-below, is `docs/work/2026-08-10-api-artefact-packaging.md`.
-
 ## Decision
 
 The artefact stops inheriting the development environment. `crates/server` is
@@ -45,6 +42,14 @@ GitHub Actions later — building this into the devcontainer, or standing up
 AWS CodeBuild now, would both be work a CI runner replaces once that lands.
 
 ## Alternatives
+
+**Cross-compile with `cargo-zigbuild`, targeting
+`x86_64-unknown-linux-gnu.2.34`.** zig supplies matching glibc headers and
+stubs to both the C compilation and the final link, so it closes both symbol
+families in one step without changing where or how the binary is built.
+Rejected before `cargo-zigbuild` was even installed: the role a second
+toolchain would play in closing this gap was judged less convincing than
+separating the artefact from the development environment outright.
 
 **Pin the devcontainer to `amazonlinux:2023`,** matching the runtime's glibc so
 the existing native, zip-packaged build becomes safe again. Rejected: it closes

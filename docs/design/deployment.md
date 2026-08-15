@@ -158,40 +158,31 @@ so the sign-in flow can be exercised against `trunk serve`.
 
 ### The API's runtime shape
 
-`crates/server` is an ordinary axum binary and is not modified for Lambda. The
-Lambda Web Adapter turns the Lambda invocation into an HTTP request against it.
-It is packaged as a container image, built by `infra/api/Dockerfile`, rather
-than as a zip plus an attached Lambda layer — the earlier form, and why it
-changed, is `docs/work/2026-08-10-api-artefact-packaging.md` and its Decision
-Record.
+`crates/server` is an ordinary axum binary and is not modified for Lambda. It
+is packaged as a container image, built by `infra/api/Dockerfile`, with the
+Lambda Web Adapter turning the Lambda invocation into an HTTP request against
+it — [DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md).
 
 - Both of the Dockerfile's stages are `public.ecr.aws/lambda/provided:al2023`.
   Building inside the runtime's own base, rather than in the devcontainer or on
-  the host's Rust image, is what keeps the binary's glibc requirement from
+  a generic Rust image, is what keeps the binary's glibc requirement from
   exceeding what the function actually ships — see the constraint below.
 - The build stage installs a C toolchain with `microdnf` and a Rust toolchain
   with `rustup`, reading the version from `rust-toolchain.toml` — the same file
   the devcontainer reads — rather than naming the version a second time.
 - The Lambda Web Adapter is copied in as an extension from its own published
   image, `public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1`, to
-  `/opt/extensions/lambda-adapter`. This is the same adapter version the
-  earlier layer form published; only how it attaches to the function changed.
+  `/opt/extensions/lambda-adapter`.
 - The image's `ENTRYPOINT` is `crates/server`'s own binary, copied to
-  `/var/task/bootstrap`, directly. There is no `AWS_LAMBDA_EXEC_WRAPPER`: that
-  setting made the adapter layer's `/opt/bootstrap` the entry point under the
-  zip form, and has no role once the adapter is an extension the runtime starts
-  on its own and the image's `ENTRYPOINT` is the service.
+  `/var/task/bootstrap` directly. That name and the adapter's own extension
+  binary are unrelated despite the shared name.
 - `AWS_LWA_PORT=3000`, matching the address `crates/server` binds, and
   `AWS_LWA_READINESS_CHECK_PATH=/health`, the endpoint the service already
   serves, are set on the function by Terraform (`infra/api/lambda.tf`), not in
-  the Dockerfile — the same as under the zip form.
+  the Dockerfile.
 - `TABLE_NAME` is set the same way, from the `data` layer's parameter, so the
   table name reaches the service without being written down twice.
   `crates/server` does not read it yet.
-
-The `/var/task/bootstrap` name and the adapter's own extension binary are
-unrelated, despite both being named `bootstrap` under the zip form this
-replaces, where the adapter's layer separately provided `/opt/bootstrap`.
 
 **Routes.** The HTTP API declares one per method the SPA calls, plus the probe:
 
@@ -304,9 +295,10 @@ code is live. No Terraform run is involved.
 **This recipe runs on the host, not in the devcontainer.** The devcontainer has
 no container engine, and deployment is intended to move to GitHub Actions later
 rather than have one added to it —
-`docs/work/2026-08-10-api-artefact-packaging.md`. `just deploy-web` and
-`just tf-*` are unaffected and still run from either side; this is the one
-recipe in this document a devcontainer shell cannot complete.
+[DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md).
+`just deploy-web` and `just tf-*` are unaffected and still run from either
+side; this is the one recipe in this document a devcontainer shell cannot
+complete.
 
 ### Configuring the SPA
 
@@ -436,17 +428,14 @@ without running either.
   visitor's console, and one flag avoids it.
 
 - **The Lambda binary is built inside the runtime's own base image, which is
-  what makes its glibc requirement structural rather than assumed.** A binary
-  built in the devcontainer or on the host's own Rust image once required glibc
-  symbols newer than `provided.al2023` ships, and failed only at invocation,
-  with no schema check or test seeing it first —
-  `docs/work/2026-08-10-api-artefact-packaging.md` is the record of that
-  failure and why packaging moved to a container image over it. Building both
-  of `infra/api/Dockerfile`'s stages on `public.ecr.aws/lambda/provided:al2023`
-  closes the gap by construction: nothing links against a newer libc than the
-  one the function ships, because none is present while linking. `objdump -T`
-  over the binary inside the built image, filtered for `GLIBC_`, is still the
-  check, and still tops out at `GLIBC_2.34`.
+  what makes its glibc requirement structural rather than assumed.** Building
+  both of `infra/api/Dockerfile`'s stages on
+  `public.ecr.aws/lambda/provided:al2023` closes the gap by construction:
+  nothing links against a newer libc than the one the function ships, because
+  none is present while linking —
+  [DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md).
+  `objdump -T` over the binary inside the built image, filtered for `GLIBC_`,
+  is the check, and tops out at `GLIBC_2.34`.
 
 - **`docker` (or a docker-CLI-compatible engine) is a host dependency of
   `deploy-api`, not a devcontainer one.** The devcontainer has no container
@@ -461,22 +450,19 @@ without running either.
 
 - **The Lambda's `image_uri` is under `ignore_changes`.** Without it, every
   `terraform apply` would revert the function to whatever `:latest` resolves to
-  in the ECR repository at that moment, which is only ever the image
-  `deploy-api` most recently pushed — not a distinct placeholder, since a
-  container image has no equivalent of a bytes-free stub the way the zip form's
-  `archive_file` did.
+  in the ECR repository at that moment — always the image `deploy-api` most
+  recently pushed, since there is no separate placeholder image.
 
 - **The ECR repository has to hold an image before `aws_lambda_function.api`
   can be created with `package_type = "Image"`.** This has no bearing on the
   ordinary apply-then-deploy cycle, where an image already exists from the
-  previous deploy — it matters once, migrating from the zip form or standing
-  the layer up from nothing. Applying `infra/api` with the ECR repository but
-  without the function first, running `deploy-api` once the repository exists,
-  then applying the function is the sequence; there is no committed placeholder
-  image to apply against instead. Migrating an already-running function also
-  replaces it — `package_type` cannot change in place — so this apply is not
-  the zero-downtime kind the rest of this document's ordering constraints
-  describe.
+  previous deploy — it matters only when the function does not exist yet.
+  Applying `infra/api` with the ECR repository but without the function first,
+  running `deploy-api` once the repository exists, then applying the function
+  is the sequence; there is no committed placeholder image to apply against
+  instead. This is also the one apply in this document that is not the
+  zero-downtime kind the rest of its ordering constraints describe, since
+  `package_type` cannot change on an existing function.
 
 - **A bundle built without the two Cognito variables cannot call the API.** The
   SPA obtains a token and attaches it (DR-0010), but only when
