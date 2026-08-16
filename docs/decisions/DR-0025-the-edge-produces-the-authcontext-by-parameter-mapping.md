@@ -1,6 +1,6 @@
 # DR-0025: The edge produces the AuthContext by request parameter mapping
 
-Status: accepted
+Status: superseded by DR-0028
 Date: 2026-08-14
 
 ## Context

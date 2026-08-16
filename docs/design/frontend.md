@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-11
+Updated: 2026-08-16
 
 ## Purpose
 
@@ -64,9 +64,9 @@ does not rebuild the screen behind it (DR-0011).
 and never where the visitor is, and a signed-in visitor arriving there stays
 there.
 
-The guard decides nothing about access. API Gateway's authorizer is the only
-enforcement point; `RequireAuth` exists so an unauthenticated visitor never
-lands on a screen that can only fail (DR-0011).
+The guard decides nothing about access. The service's own Cognito verification
+is the only enforcement point (DR-0028); `RequireAuth` exists so an
+unauthenticated visitor never lands on a screen that can only fail (DR-0011).
 
 **Data fetching.** `crates/app/src/api.rs` holds one async function per
 endpoint. Each returns `Result<T, ApiError>` where `T` comes from
@@ -201,19 +201,22 @@ dependency of `crates/icongen` alone (DR-0019).
   never arises. Production is cross-origin and requires CORS on the API —
   DR-0001. Which backend it proxies to is chosen by the recipe rather than by
   `Trunk.toml`, which holds no `[[proxy]]` block: `dev-web` and `dev-web-auth`
-  pass `127.0.0.1:3000`, the service itself, and `dev-web-gateway` passes
-  `127.0.0.1:3001`, the token adapter in front of it — DR-0023. A bare
-  `trunk serve` outside `just` therefore proxies nothing.
+  both pass `127.0.0.1:3000`, the service itself, because trunk appends a
+  command-line backend to the file's entries rather than overriding them, so a
+  default in the file could not be overridden by the flag either recipe needs
+  to pass regardless — DR-0023. A bare `trunk serve` outside `just` therefore
+  proxies nothing.
 - Every request under `/api` needs a Cognito access token in an `Authorization`
   header, which `auth.rs` obtains from the hosted UI and `api.rs` attaches — but
-  only in a build configured for it. An unconfigured build sends no header, which
-  the local API accepts and API Gateway does not, so a deployed bundle built
-  without the two Cognito variables fails every call it makes.
-  Configuration is what distinguishes the two, not code — DR-0010.
+  only in a build configured for it. An unconfigured build sends no header,
+  which `just dev-api`'s `identity::Auth::Mock` accepts and the deployed
+  `identity::Auth::Cognito` does not, so a deployed bundle built without the
+  two Cognito variables fails every call it makes. Configuration is what
+  distinguishes the two, not code — DR-0010.
 - The token is never validated in the browser. Expiry is checked so an expired
   one is not sent, and the id token is decoded once for the claims the screens
-  display, but neither is a signature check: API Gateway's authorizer is the
-  security boundary — DR-0010.
+  display, but neither is a signature check: the service's own Cognito
+  verification is the security boundary — DR-0010, DR-0028.
 - The route guard is not part of that boundary. It keeps a visitor off a screen
   that could only fail, and decides nothing a server would otherwise decide —
   DR-0011.

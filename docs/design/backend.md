@@ -1,6 +1,6 @@
 # Backend
 
-Updated: 2026-08-14
+Updated: 2026-08-16
 
 ## Purpose
 
@@ -15,39 +15,53 @@ Web Adapter turns an invocation into an HTTP request on `127.0.0.1:3000`, and
 
 | File | Role |
 | --- | --- |
-| `src/main.rs` | The router, the shared state, and which store the process is using |
+| `src/main.rs` | The router, the shared state, and which store and auth arrangement the process is using |
 | `src/identity.rs` | Who the caller is |
+| `src/cognito.rs` | Verifying a Cognito token's signature, issuer, expiry and audience |
+| `src/jwks.rs` | The pool's signing keys: fetch, parse, verify by `kid` |
 | `src/store.rs` | Reading and writing the table |
 | `src/action_types.rs` | `/api/action-types`, and what may be stored |
 | `src/dashboard.rs` | `/api/dashboard`, still answering from fixed values |
+| `src/testkey.rs` | A committed RSA fixture the identity/cognito/jwks tests sign with — `#[cfg(test)]` only |
 
-`Arc<Store>` is the router's state, built once at startup. The SDK client is
-expensive to construct and cheap to share, and which store the process is using
-cannot change while it runs.
+`AppState { store: Arc<Store>, auth: Arc<identity::Auth> }` is the router's
+state, built once at startup. Both the SDK client and the pool's key set are
+expensive to construct and cheap to share, and which store and which auth
+arrangement the process is using cannot change while it runs.
 
 **Identity.** `identity::Owner` is an axum extractor, and it is the whole of
 user isolation. A handler asks for the owner and cannot ask for anything else:
 no path, query or body parameter names one, which is what stops a handler from
-serving a partition its caller does not own. The value is the Cognito `sub`.
+serving a partition its caller does not own — and, since DR-0028, no route
+grants this for free: a handler that does not name `Owner` is reachable by
+anyone with no token, so every handler under `/api` names it, `dashboard()`
+included even though it does nothing with the value yet.
 
-It reads that subject from an `AuthContext` — the service's own description of
-who is calling — and from nothing else. Nothing in this crate names API Gateway,
-a request context, a JWT or a claim, and the crate depends on neither `serde` nor
-`serde_json`, because there is nothing left to deserialise. Whatever speaks AWS's
-dialect converts it first, in front of the service, because in the deployment
-that component is in front of the service (DR-0024).
+**Two arrangements, chosen once at startup by `identity::Auth::from_environment`**,
+the same shape `store::Store` already uses for which store to run:
 
-The `AuthContext` arrives as two headers, and it is deliberately not a serialised
-object — the service parses nothing at all (DR-0025):
+| Arrangement | Selected when | Produces the owner from |
+| --- | --- | --- |
+| `Auth::Cognito` | `COGNITO_ISSUER` and `COGNITO_AUDIENCE` both set | A real Cognito token, verified against the pool |
+| `Auth::Mock` | Both unset — `just dev-api`'s default | Two headers, set by hand |
+
+`Auth::Cognito` fetches the pool's key set once, before the listener binds — a
+pool that cannot be reached is a reason to stop, with the reason on screen,
+not to accept connections and refuse every one of them for a cause nobody can
+see. It then verifies RS256 against the key the token's `kid` names, then
+`iss`, `exp`, and the audience — satisfied by `client_id` for an access token
+or `aud` for an id token, because a Cognito access token carries the app
+client id one way and an id token the other, and both are accepted (DR-0028).
+Every failure is refused: no token, a bad signature, a wrong issuer or
+audience, an expired token, a token with no usable `sub`. There is no
+development-owner fallback in this arrangement at all.
+
+`Auth::Mock` reads two headers:
 
 | Header | Carries |
 | --- | --- |
-| `x-auth-subject` | The caller's Cognito `sub` |
-| `x-auth-edge` | Nothing. Its presence is the assertion that an edge handled this request |
-
-The service never validates a token, holds no JWT library, and has no public
-keys. API Gateway's JWT authorizer has already run and is the only enforcement
-point there is (DR-0010).
+| `x-auth-subject` | The subject a caller asserts by hand |
+| `x-auth-edge` | Nothing. Its presence is the assertion that a caller means to name someone |
 
 Three cases, and the difference between the last two is the point:
 
@@ -57,23 +71,22 @@ Three cases, and the difference between the last two is the point:
 | Neither header | A constant development owner — DR-0018 |
 | `x-auth-edge` with `x-auth-subject` absent or empty | Nobody. The request is refused with `401` |
 
-Absent means development: nothing in front asserted anything, so there is
-nothing to misread, and that is what makes `just dev-api` a working application
-with no configuration. Marked-but-unnamed means something in front *did* assert
-an identity and the service failed to learn it — treating that as "nobody said
-anything" is how a write reaches the wrong partition silently, so it fails closed
-(DR-0024).
-
-`x-auth-edge` is what makes the distinction structural rather than inferred. With
-only a subject header, an edge that failed to produce one would be
-indistinguishable from no edge at all, and the failure would be a silent write
-into the development owner's partition (DR-0025).
-
-Being a particular caller under `just dev-api` is therefore both headers sent by
+Absent means development, but **only under `Auth::Mock`**: nothing asserted
+anything, so there is nothing to misread, and that is what makes `just
+dev-api` a working application with no configuration. Under `Auth::Cognito`
+this fallback does not exist — a missing token is refused exactly like a bad
+one. Being a particular caller under `just dev-api` is both headers sent by
 hand — `x-auth-edge: curl` and `x-auth-subject: alice`. Two callers are one
-`curl` flag apart, with no token, no adapter and no AWS credentials, which is
-what makes owner isolation checkable at all locally. A subject without the edge
-header asserts nothing and is still the development owner.
+`curl` flag apart, with no token and no AWS credentials, which is what makes
+owner isolation checkable at all locally.
+
+**The safety argument is which variant is running, not anything in front of
+the service.** `Auth::Mock` is the only arrangement that ever reads the two
+headers, and it is only active when `COGNITO_ISSUER`/`COGNITO_AUDIENCE` are
+unset — which the deployed Lambda never has, since Terraform always sets
+both, mirroring `TABLE_NAME`. The deployed function is therefore always
+`Auth::Cognito`, which never reads either header at all, whatever a caller
+sends (DR-0028).
 
 **The store.** `store::Store` is an enum with two variants, chosen from the
 environment at startup: `TABLE_NAME` set selects DynamoDB, unset selects an
@@ -114,7 +127,7 @@ could do.
 
 | Route | Answers |
 | --- | --- |
-| `GET /health` | `ok`. Routed outside the authorizer, because a probe carries no token |
+| `GET /health` | `ok`. Deliberately unauthenticated, because a probe carries no token |
 | `GET /api/dashboard` | `shared::Dashboard`, from hardcoded values |
 | `GET /api/action-types` | `shared::ActionType[]`, oldest first |
 | `POST /api/action-types` | `201` and the stored `shared::ActionType`, from a `shared::NewActionType` |
@@ -124,36 +137,45 @@ production is answered by the HTTP API rather than here (DR-0009). A new method
 under `/api` needs `local.api_methods` in `infra/api/apigateway.tf` to name it;
 a new path does not.
 
-**Depends on** `axum` and `tokio`, `aws-config` and `aws-sdk-dynamodb`,
-`ulid`, `time` for one formatted instant, and `shared`. Not `serde` or
-`serde_json`: both were declared for the request-context parsing that DR-0024
-removed, and nothing else in the crate names them. The `Json` extractor's own
-serialisation reaches it through `axum`, and the types it serialises derive their
-implementations in `shared`.
+**Depends on** `axum` and `tokio`, `aws-config` and `aws-sdk-dynamodb`, `ulid`,
+`time` for one formatted instant, and `shared`. Also `hyper-util` and
+`hyper-rustls` for the JWKS fetch, `aws-lc-rs` for both the TLS leg and the
+RS256 signature check, and `serde`/`serde_json`/`base64` for the key set and
+the token payload — all five already resolved in `Cargo.lock` beneath
+`aws-sdk-dynamodb`, so declaring them here adds dependency edges and no
+packages (DR-0028).
 
-**Reads** `TABLE_NAME` from the environment, and nothing else. The SDK reads its
-own variables underneath — the region, the credentials, and the
-`AWS_ENDPOINT_URL_DYNAMODB` that `just dev-api-dynamo` redirects the client with.
-None of them is named in this crate, which is why running against a local
-DynamoDB cost it no code (DR-0020).
+**Reads** `TABLE_NAME`, `COGNITO_ISSUER` and `COGNITO_AUDIENCE` from the
+environment, and nothing else besides what the SDK reads underneath — the
+region, the credentials, and the `AWS_ENDPOINT_URL_DYNAMODB` that `just
+dev-api-dynamo` redirects the client with. None of the SDK's variables is
+named in this crate, which is why running against a local DynamoDB cost it no
+code (DR-0020).
 
 ## Constraints
 
 - **The owner comes from the `AuthContext` and from nowhere else.** The IAM
   policy cannot express user isolation — the function serves every user, so its
   permissions cover every partition — so a handler that took an owner from a
-  request parameter would defeat it entirely — DR-0010, DR-0024.
-- **Whatever carries the `AuthContext` into the service is not a security
-  boundary.** Anyone who could reach the service directly could forge both
-  headers; nothing can, because API Gateway is the only route to the function and
-  its mapping `overwrite:`s them on every request. `append:` in place of
-  `overwrite:` would silently end this, and exposing the service by any other
-  path invalidates it — DR-0024, DR-0025.
-- **A missing `AuthContext` means development; a marked one with no subject means
-  rejection.** Neither occurs in a deployed function. If the first ever did, the
-  write would land in the development owner's partition rather than failing —
-  DR-0018 — which is precisely why the deployed edge sets `x-auth-edge`
-  statically rather than relying on the subject mapping to resolve — DR-0025.
+  request parameter would defeat it entirely — DR-0024.
+- **Every handler under `/api` must name `Owner`, even one that does not yet
+  use the value.** Gating moved from the route table to the handler's own
+  signature — DR-0028. A handler that forgets is reachable by anyone with no
+  token; `dashboard()` names it unused for exactly this reason.
+- **`COGNITO_AUDIENCE` is a hand-maintained copy of what Cognito puts in a
+  token's `client_id`/`aud`, and `COGNITO_ISSUER` of the pool's issuer URL.**
+  Both come from SSM, resolved the same way `deploy-web`'s Cognito variables
+  are; a wrong one refuses every real token with a `401` that looks identical
+  to a broken sign-in — `just dev-api-cognito` exists to make that checkable
+  before a deploy rather than after one (DR-0028).
+- **Exactly one of `COGNITO_ISSUER`/`COGNITO_AUDIENCE` set is a startup
+  error, not a fallback to `Auth::Mock`.** A half-configured environment must
+  never silently downgrade to header-trusting mode — DR-0028.
+- **A missing `AuthContext` under `Auth::Mock` means development; a marked one
+  with no subject means rejection. Under `Auth::Cognito`, a missing token is
+  refused with no fallback at all.** The first pair is unreachable in a
+  deployed function, because Terraform always sets both Cognito variables,
+  selecting `Auth::Cognito` — DR-0018, DR-0028.
 - **`created_at` and the instant inside a record's sort key must be fixed-width
   RFC 3339 in UTC.** `store::TIMESTAMP` is the only thing enforcing it, and a
   variable-width instant fails silently — DR-0015.

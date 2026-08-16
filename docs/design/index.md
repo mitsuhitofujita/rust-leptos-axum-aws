@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -49,7 +49,7 @@ Not yet written, because it does not exist yet:
 | [DR-0007](../decisions/DR-0007-the-hosted-ui-domain-prefix-does-not-echo-the-project-name.md) | The Cognito hosted-UI domain prefix does not echo the project name |
 | [DR-0008](../decisions/DR-0008-the-spa-is-configured-at-compile-time.md) | The SPA receives its configuration at compile time, not at runtime |
 | [DR-0009](../decisions/DR-0009-cors-is-answered-by-the-http-api.md) | CORS is answered by the HTTP API, so `/api` routes are declared per method |
-| [DR-0010](../decisions/DR-0010-the-spa-signs-in-through-the-hosted-ui-by-hand.md) | The SPA signs in through the hosted UI, with a PKCE flow written by hand |
+| [DR-0010](../decisions/DR-0010-the-spa-signs-in-through-the-hosted-ui-by-hand.md) | The SPA signs in through the hosted UI, with a PKCE flow written by hand — narrowed by DR-0028 |
 | [DR-0011](../decisions/DR-0011-authenticated-screens-are-guarded-in-the-router.md) | Authenticated screens are guarded in the router, as experience rather than enforcement |
 | [DR-0012](../decisions/DR-0012-action-types-choose-icons-from-a-built-in-set.md) | Action types choose one icon from an application-owned built-in set — superseded by DR-0014 |
 | [DR-0013](../decisions/DR-0013-action-type-icons-use-a-searchable-modal-picker.md) | Action type icons are selected through a searchable modal picker |
@@ -61,9 +61,10 @@ Not yet written, because it does not exist yet:
 | [DR-0019](../decisions/DR-0019-the-icon-catalog-ships-lucide-geometry-not-lucide-components.md) | The icon catalog ships Lucide geometry, not `lucide-leptos` components |
 | [DR-0020](../decisions/DR-0020-local-verification-runs-against-dynamodb-local.md) | Local verification runs against DynamoDB Local, pinned in the development image |
 | [DR-0021](../decisions/DR-0021-the-deployed-edge-is-reproduced-outside-the-service.md) | The deployed edge is reproduced locally, outside the service — superseded by DR-0023 |
-| [DR-0022](../decisions/DR-0022-real-cognito-tokens-are-verified-locally-by-the-stand-in.md) | Real Cognito tokens are verified locally, by the stand-in and not by the service |
-| [DR-0023](../decisions/DR-0023-aws-behaviour-is-not-reimplemented-locally.md) | AWS behaviour is not re-implemented locally |
-| [DR-0024](../decisions/DR-0024-the-service-reads-an-authcontext.md) | The service reads an `AuthContext`, not AWS's request context |
-| [DR-0025](../decisions/DR-0025-the-edge-produces-the-authcontext-by-parameter-mapping.md) | The edge produces the `AuthContext` by API Gateway request parameter mapping |
+| [DR-0022](../decisions/DR-0022-real-cognito-tokens-are-verified-locally-by-the-stand-in.md) | Real Cognito tokens are verified locally, by the stand-in and not by the service — superseded by DR-0028 |
+| [DR-0023](../decisions/DR-0023-aws-behaviour-is-not-reimplemented-locally.md) | AWS behaviour is not re-implemented locally — narrowed by DR-0028 |
+| [DR-0024](../decisions/DR-0024-the-service-reads-an-authcontext.md) | The service reads an `AuthContext`, not AWS's request context — narrowed by DR-0028 |
+| [DR-0025](../decisions/DR-0025-the-edge-produces-the-authcontext-by-parameter-mapping.md) | The edge produces the `AuthContext` by API Gateway request parameter mapping — superseded by DR-0028 |
 | [DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md) | The API is packaged as a container image, with the Lambda Web Adapter built in as an extension — narrowed by DR-0027 |
 | [DR-0027](../decisions/DR-0027-the-devcontainer-reaches-the-hosts-container-engine.md) | The devcontainer reaches the host's container engine over its socket |
+| [DR-0028](../decisions/DR-0028-cognito-tokens-are-verified-by-the-service.md) | Cognito tokens are verified by the service, not by API Gateway's authorizer |

@@ -3,16 +3,25 @@
 Updated: 2026-08-16
 
 Note: all five layers have been applied and their twelve SSM parameters exist.
-The API is deployed and `GET /health` returns `ok`. The `AuthContext`
-parameter mapping and the container-image packaging described below are both
-applied and verified end to end against real AWS with a real Cognito access
-token: `POST /api/action-types` answered `201` and the following
-`GET /api/action-types` returned that record, both against the deployed
-function and the real table. `crates/server` still answers
-`GET /api/dashboard` from hardcoded values. The bundle on CloudFront was
-built without the two Cognito variables, so it sends no token and `/api`
-calls are answered 401 there; one `just deploy-web` replaces it with a build
-that signs in.
+The API is deployed and `GET /health` returns `ok`. The container-image
+packaging described below is applied and verified end to end against real
+AWS. `crates/server` still answers `GET /api/dashboard` from hardcoded
+values. The bundle on CloudFront was built without the two Cognito
+variables, so it sends no token and `/api` calls are answered 401 there; one
+`just deploy-web` replaces it with a build that signs in.
+
+**DR-0028's move of Cognito verification into `crates/server` is applied and
+verified end to end against real AWS.** The deployed function verifies
+tokens itself; `aws_apigatewayv2_authorizer.cognito` and the parameter
+mapping are gone. A real access token from the hosted UI was accepted and
+attributed to its `sub`; the same token with a tampered signature was
+refused; a request with no token was refused by the service itself,
+confirmed in the Lambda's own CloudWatch log rather than API Gateway's; and
+a CORS preflight with no token was answered by the HTTP API without
+reaching the Lambda. An expired token was not exercised against real AWS —
+a real access token is valid an hour — and is covered instead by
+`cognito::tests::an_expired_token_is_refused` against the fixture key and a
+fixed clock.
 
 ## Purpose
 
@@ -37,7 +46,7 @@ the API is a separate service, and the two are released independently.
 | Authentication | A Cognito User Pool with Google as an identity provider, Authorization Code Flow with PKCE |
 | Application data | One on-demand DynamoDB table, keyed by owner — see [persistence.md](persistence.md) |
 | The axum API (`crates/server`) | AWS Lambda on `provided.al2023`, packaged as a container image with the AWS Lambda Web Adapter built in |
-| API exposure | An API Gateway HTTP API with a JWT authorizer validating Cognito access tokens |
+| API exposure | An API Gateway HTTP API; the function itself validates Cognito access tokens (DR-0028) |
 
 ### The configuration
 
@@ -54,8 +63,8 @@ infra/
   identity/                  Cognito User Pool, Google IdP, hosted-UI domain,
                              app client
   data/                      the DynamoDB table — DR-0015
-  api/                       Lambda, HTTP API, JWT authorizer, CORS, IAM role,
-                             log groups, the ECR repository the image lives in
+  api/                       Lambda, HTTP API, CORS, IAM role, log groups,
+                             the ECR repository the image lives in
     Dockerfile               builds crates/server into the image the function runs
 ```
 
@@ -131,8 +140,8 @@ what it needs with the `aws_ssm_parameter` data source.
 | `/<project>/delivery/cloudfront_distribution_id` | `delivery` | `just deploy-web` |
 | `/<project>/delivery/spa_bucket` | `delivery` | `just deploy-web` |
 | `/<project>/identity/user_pool_id` | `identity` | operators, so the pool is addressable without reading state |
-| `/<project>/identity/user_pool_issuer` | `identity` | `api`, for the JWT authorizer |
-| `/<project>/identity/app_client_id` | `identity` | `api`, as the authorizer's audience; the SPA build, as `COGNITO_CLIENT_ID` |
+| `/<project>/identity/user_pool_issuer` | `identity` | `api`, as the Lambda's `COGNITO_ISSUER` |
+| `/<project>/identity/app_client_id` | `identity` | `api`, as the Lambda's `COGNITO_AUDIENCE`; the SPA build, as `COGNITO_CLIENT_ID` |
 | `/<project>/identity/hosted_ui_domain` | `identity` | the SPA build, as `COGNITO_HOSTED_UI_DOMAIN` |
 | `/<project>/data/table_name` | `data` | `api`, as the Lambda's `TABLE_NAME` |
 | `/<project>/data/table_arn` | `data` | `api`, to scope the Lambda's IAM policy |
@@ -174,76 +183,52 @@ it — [DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.m
   the Dockerfile.
 - `TABLE_NAME` is set the same way, from the `data` layer's parameter, so the
   table name reaches the service without being written down twice.
-  `crates/server` does not read it yet.
+- `COGNITO_ISSUER` and `COGNITO_AUDIENCE` are set from the `identity` layer's
+  `user_pool_issuer`/`app_client_id` parameters — what
+  `aws_apigatewayv2_authorizer.cognito`'s `jwt_configuration` used to hold,
+  now read by the service directly (DR-0028). Both set is what selects
+  `identity::Auth::Cognito` over the header-trusting `Auth::Mock` at startup;
+  see `backend.md`.
 
-**Routes.** The HTTP API declares one per method the SPA calls, plus the probe:
+**Routes.** The HTTP API declares one per method the SPA calls, plus the probe,
+all through one integration — `crates/server` verifies the `Authorization`
+header itself now, so nothing at this layer authorizes or maps anything:
 
-| Route | Authorization | Integration |
-| --- | --- | --- |
-| `GET /api/{proxy+}` | JWT authorizer, so every call the SPA makes carries a Cognito access token | `api` |
-| `POST /api/{proxy+}` | the same | `api` |
-| `GET /health` | none — a probe has no token, and the endpoint returns a constant | `health` |
-
-**The edge produces the service's `AuthContext`.** `crates/server` reads two
-headers and knows nothing about API Gateway (`backend.md`, DR-0024). This layer is
-where the conversion happens, by request parameter mapping on the `api`
-integration:
-
-```hcl
-"overwrite:header.x-auth-subject" = "$context.authorizer.claims.sub"
-"overwrite:header.x-auth-edge"    = "apigateway"
-```
-
-Mapping is AWS's own mechanism, so nothing here re-implements AWS behaviour
-(DR-0023), and because the subject is one value API Gateway resolves, no map of
-claims is forwarded or parsed anywhere.
-
-`overwrite:` is load-bearing: the service trusts these headers only because the
-edge replaces whatever the caller sent, and `append:` would end that quietly.
-
-**Two integrations to one function, which is the only reason there are two.**
-Mapping is an attribute of the integration, not of the route, and `/health` is
-routed outside the authorizer where `$context.authorizer.claims.sub` cannot
-resolve. API Gateway skips a mapping whose source does not resolve, so a shared
-integration would let a caller's own `x-auth-*` headers through on the probe. The
-`health` integration carries `remove:` for both instead — DR-0025.
+| Route | Integration |
+| --- | --- |
+| `GET /api/{proxy+}` | `api` |
+| `POST /api/{proxy+}` | `api` |
+| `GET /health` | `api` |
 
 `{proxy+}` means a new *endpoint* under `/api` in `crates/server` needs no change
 to the infrastructure. A new *method* does: it goes in `local.api_methods` in
 `infra/api/apigateway.tf`, which both this route set and the CORS
 `allow_methods` list derive from, and which is the only place it lives — DR-0023
-removed the second copy. The methods are enumerated rather than covered by a single
-`ANY` route so that the HTTP API answers CORS preflight itself — DR-0009, and the
-CORS constraint below.
+removed the second copy. The methods stay enumerated rather than covered by a
+single `ANY` route so that the HTTP API answers CORS preflight itself without
+proxying it to a function that has no `OPTIONS` handler — DR-0009, DR-0028, and
+the CORS constraint below.
 
-**The edge is verified here, not locally.** Everything this section describes
-between the browser and the service — the route table, the preflight answered
-ahead of the authorizer, the 401 for a request with no token, and the parameter
-mapping that produces the `AuthContext` — is checked by exercising the deployed
-API, because it is behaviour AWS defines. It was reproduced locally for a time,
-under DR-0021, and that was retracted: a local mirror of this section is a second
-telling of AWS's specification, maintained by hand, which drifts silently and can
-never be authoritative about the thing it imitates (DR-0023). So a fault in the
-route set or the preflight surfaces after an apply rather than before one, and
-`just tf-validate` is as far as anything can be checked in advance.
+**The service verifies its own caller now; the route table is still verified
+against real AWS, not locally.** `crates/server`'s `identity::Auth::Cognito`
+does what `aws_apigatewayv2_authorizer.cognito` used to: fetch the pool's key
+set once at startup, then check RS256, `iss`, `exp` and the audience —
+satisfied by `client_id` for an access token or `aud` for an id token — on
+every request, refusing anything that fails with no fallback. What remains
+checked only against the deployed API, because it is behaviour AWS defines
+rather than this repository's: the route table, and the preflight answered
+ahead of the route table by `cors_configuration`. Both were reproduced
+locally for a time, under DR-0021, and that was retracted — a local mirror
+is a second telling of AWS's specification, maintained by hand, which drifts
+silently (DR-0023). `just tf-validate` is as far as either can be checked in
+advance; a fault in the route set or the preflight surfaces after an apply.
 
-The mapping is the newest member of that list and the one worth naming: `just
-tf-validate` schema-checks it and cannot evaluate a `$context` expression. The
-check after an apply is that a `/api` call is attributed to the token's `sub`
-rather than to the development owner, and that `GET /health` still answers `ok`.
-
-**The authorizer's configuration is the exception, and is checkable before an
-apply.** `just dev-gateway` runs a thin adapter that does nothing but reach the
-authorizer's verdict: it resolves `issuer` and `audience` from the same two SSM
-parameters this layer reads them from, fetches the pool's keys from
-`{issuer}/.well-known/jwks.json`, and accepts or refuses a real token the way
-`aws_apigatewayv2_authorizer.cognito` would — DR-0022. A refusal answers exactly
-what the deployed authorizer answers and prints the reason on its own terminal,
-which is the distinction that does not exist in production, where every one of
-these faults is an indistinguishable 401. This one is worth keeping where the
-rest was not: `jwt_configuration` is four lines this repository owns, its faults
-are otherwise indistinguishable from a broken sign-in, and the check uses the
-real pool's real keys rather than a description of them — DR-0023.
+**`just dev-api-cognito` is where the Cognito configuration is checkable
+before an apply**, the same role `just dev-gateway` played before DR-0028
+retired it. It runs `crates/server` itself with `COGNITO_ISSUER`/
+`COGNITO_AUDIENCE` resolved from the same two SSM parameters this layer reads
+them from, so a wrong one is visible here rather than as a 401 after a
+deploy indistinguishable from a broken sign-in.
 
 ### Deploying artefacts
 
@@ -331,15 +316,20 @@ without running either.
 
 ## Constraints
 
-- **`just tf-apply api` comes before `just deploy-api`, and the reverse order
-  misattributes every request.** The mapping and the binary that reads it are
-  two artefacts on two cadences (DR-0001), so one necessarily lands first.
-  Applying first is safe: the edge sets two headers the old binary ignores.
-  Deploying first is not: the new binary would find no `x-auth-edge` on any
-  request, read that as "no edge spoke", and attribute every user's writes to the
-  development owner — silently, with a 200, in exactly the way DR-0024 and
-  DR-0025 exist to prevent. This is the one deployment ordering in this project
-  that is unsafe rather than merely inconvenient, and nothing enforces it.
+- **`just tf-apply api` comes before `just deploy-api`.** The two are on
+  separate cadences (DR-0001), so one necessarily lands first, and applying
+  first is the safe order: a Terraform change to the Lambda's configuration
+  or the route table is inert until the next invocation, which the still-running
+  binary answers exactly as before. **The one exception was the DR-0028
+  transition itself**, which needed the reverse order once, for a reason that
+  does not recur: removing the parameter mapping while the *old* binary still
+  trusted it unconditionally would have attributed every request to the
+  development owner silently. Deploying the new binary first was safe instead,
+  because it falls back to `Auth::Mock`, which the still-active old mapping
+  still satisfied correctly. That transition is recorded in DR-0028's
+  Consequences; the standing apply-before-deploy rule above holds without
+  exception now that `identity::Auth::Cognito` is the steady state, since
+  every mismatch under it fails closed rather than open.
 
 - **CloudFront maps both 403 and 404 to `/index.html` with status 200.** Deep
   links are router paths, not files, so without this every reload on a non-root
@@ -357,38 +347,38 @@ without running either.
 - **The SPA and the API are separate origins, and CORS is configured on the
   HTTP API rather than in `crates/server`.** DR-0001 records the missing CORS
   layer in the service as a gap deployment has to close; deployment closes it at
-  API Gateway, whose HTTP APIs answer preflight themselves, ahead of any
-  authorizer — so a preflight is not rejected for lacking a token. The allowed
-  origin is the CloudFront domain. `crates/server` therefore stays free of a CORS
-  layer, and local development stays single-origin through the trunk proxy —
-  DR-0009.
+  API Gateway, whose HTTP APIs answer preflight themselves, ahead of the route
+  table — so a preflight is not routed to the function and blocked for lacking a
+  token. The allowed origin is the CloudFront domain. `crates/server` therefore
+  stays free of a CORS layer, and local development stays single-origin through
+  the trunk proxy — DR-0009.
 
   **That built-in answer only applies to an `OPTIONS` request no route matches**,
   which is why `/api/{proxy+}` is declared once per method instead of once as
-  `ANY`. An `ANY` route matches `OPTIONS` too and puts the JWT authorizer in
-  front of the preflight, which is answered 401 and blocks the request it
-  precedes.
+  `ANY`. An `ANY` route matches `OPTIONS` too and would proxy every preflight to
+  the function, which has no `OPTIONS` handler — DR-0028 confirmed this reasoning
+  survives removing the JWT authorizer, since it never depended on one.
 
   `/api/*` is deliberately not routed through CloudFront as a second origin,
   which would have made the SPA single-origin and removed CORS entirely —
   DR-0008.
 
-- **Reaching the API from a browser through `just dev-gateway` means
-  `dev-web-auth`.** The adapter verifies a real token, and a `dev-web` bundle
-  built without the two Cognito variables sends no `Authorization` header at all,
-  so every `/api` call is a 401. That is the deployment constraint below,
-  appearing locally as a consequence of what the adapter does rather than as
-  something arranged — DR-0022.
+- **Reaching the API from a browser with real Cognito verification active
+  means `dev-web-auth`.** `just dev-api-cognito` verifies a real token, and a
+  `dev-web` bundle built without the two Cognito variables sends no
+  `Authorization` header at all, so every `/api` call is a 401. That is the
+  deployment constraint below, appearing locally as a consequence of what
+  `identity::Auth::Cognito` does rather than as something arranged — DR-0028.
 
-- **The authorizer's `audience` is matched against `client_id` for an access
-  token and `aud` for an id token.** `jwt_configuration.audience` holds the app
-  client id, and which claim carries it depends on which token the SPA sent: a
-  Cognito **access** token carries it as `client_id`, an **id** token as `aud`.
-  API Gateway accepts either, so both are a working configuration and neither is
+- **The service's audience check is matched against `client_id` for an access
+  token and `aud` for an id token.** `COGNITO_AUDIENCE` holds the app client
+  id, and which claim carries it depends on which token the SPA sent: a
+  Cognito **access** token carries it as `client_id`, an **id** token as
+  `aud`. Both are accepted, so both are a working configuration and neither is
   a way to tell them apart from the outside. `crates/app/src/api.rs` sends the
-  access token. This is the detail `just dev-gateway` exists to make visible — it
-  names which kind arrived and which claim satisfied the audience, on every
-  accepted request — DR-0022.
+  access token. This is the detail `just dev-api-cognito` exists to make
+  visible — it names which kind arrived and which claim satisfied the
+  audience, on every accepted request — DR-0028.
 
 - **One Cognito app client serves production and local development alike**, so
   its callback and logout URLs list the CloudFront domain *and*
@@ -460,9 +450,11 @@ without running either.
 - **A bundle built without the two Cognito variables cannot call the API.** The
   SPA obtains a token and attaches it (DR-0010), but only when
   `COGNITO_CLIENT_ID` and `COGNITO_HOSTED_UI_DOMAIN` were set at build time.
-  Unset, it sends no header — correct locally, where the axum server validates
-  nothing, and a 401 on every `/api` call once deployed. `just deploy-web` sets
-  both, so the way to produce that bundle is to build it by some other route.
+  Unset, it sends no header — correct against `just dev-api`, where
+  `identity::Auth::Mock` is running and reads no token at all, and a 401 on
+  every `/api` call once deployed, where `identity::Auth::Cognito` refuses a
+  request with none. `just deploy-web` sets both, so the way to produce that
+  bundle is to build it by some other route.
 
 - **One app client, so a token obtained locally is one the deployed API
   accepts.** Both origins are registered on the same client and the authorizer's

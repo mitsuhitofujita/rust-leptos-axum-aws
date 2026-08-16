@@ -1,6 +1,6 @@
 # DR-0022: Real Cognito tokens are verified locally, by the stand-in and not by the service
 
-Status: accepted
+Status: superseded by DR-0028
 Date: 2026-08-11
 
 ## Context

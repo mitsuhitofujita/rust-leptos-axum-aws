@@ -1,6 +1,6 @@
 # DR-0024: The service reads an AuthContext, not AWS's request context
 
-Status: accepted
+Status: narrowed by DR-0028
 Date: 2026-08-13
 
 ## Context

@@ -1,6 +1,6 @@
 # DR-0023: AWS behaviour is not re-implemented locally
 
-Status: accepted
+Status: narrowed by DR-0028
 Date: 2026-08-13
 
 ## Context

@@ -1,6 +1,6 @@
 # DR-0010: The SPA signs in through the hosted UI, with a PKCE flow written by hand
 
-Status: accepted
+Status: narrowed by DR-0028
 Date: 2026-08-07
 
 ## Context
