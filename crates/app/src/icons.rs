@@ -142,6 +142,60 @@ pub fn Trash() -> impl IntoView {
     }
 }
 
+/// The account menu's `Action` entry.
+#[component]
+pub fn Pulse() -> impl IntoView {
+    view! {
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+    }
+}
+
+/// The account menu's `Action Type` entry.
+#[component]
+pub fn Tag() -> impl IntoView {
+    view! {
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+            <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+        </svg>
+    }
+}
+
+/// The account menu's `Log out` entry.
+#[component]
+pub fn LogOut() -> impl IntoView {
+    view! {
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" x2="9" y1="12" y2="12" />
+        </svg>
+    }
+}
+
 /// Stands in for a profile image when the id token carried no `picture` claim,
 /// and in an unconfigured build, where there is no account at all.
 #[component]

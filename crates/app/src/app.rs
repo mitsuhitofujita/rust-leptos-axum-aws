@@ -1,3 +1,4 @@
+use leptos::html::{Button, Dialog};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::NavigateOptions;
@@ -9,6 +10,7 @@ use crate::action_types::{ActionTypesPage, EditActionTypePage, NewActionTypePage
 use crate::auth::{self, AuthState};
 use crate::dashboard::DashboardPage;
 use crate::home::{HomePage, ProfileImage};
+use crate::icons::{Close, LogOut, Pulse, Tag};
 
 /// The auth state, shared through context so every screen reads the same one. A
 /// signal rather than a resource: `complete_sign_in` runs once at mount, and
@@ -172,9 +174,12 @@ pub fn RequireAuth(children: ChildrenFn) -> impl IntoView {
 /// The control an authenticated application screen carries at the end of its
 /// top row.
 ///
-/// Page Layouts requires it to reach the action-type area, and it is the only
-/// route to that area from the dashboard, so it links there directly rather
-/// than opening a menu with one entry.
+/// It opens a menu rather than linking straight to one place, because it now
+/// has to reach three destinations — the actions list, the action-type area,
+/// and signing out. The menu is a native `<dialog>`, shown with `showModal`
+/// the same way `IconField`'s picker and the delete-confirmation dialog are:
+/// focus containment and Escape-to-close come from the browser, not from code
+/// written here.
 #[component]
 pub fn AccountControl() -> impl IntoView {
     let auth_state = auth_state();
@@ -183,14 +188,90 @@ pub fn AccountControl() -> impl IntoView {
         _ => None,
     };
 
+    let dialog: NodeRef<Dialog> = NodeRef::new();
+    let trigger: NodeRef<Button> = NodeRef::new();
+    let expanded = RwSignal::new(false);
+
+    let open = move |_| {
+        expanded.set(true);
+        if let Some(element) = dialog.get_untracked() {
+            let _ = element.show_modal();
+        }
+    };
+
+    let close = move || {
+        if let Some(element) = dialog.get_untracked() {
+            element.close();
+        }
+    };
+
+    // Escape and the close control both end here, exactly as `IconField`
+    // handles it, so returning focus to the trigger is written once.
+    let dismissed = move |_| {
+        expanded.set(false);
+        if let Some(element) = trigger.get_untracked() {
+            let _ = element.focus();
+        }
+    };
+
+    let sign_out = move |_| {
+        close();
+        if let Err(error) = auth::sign_out() {
+            auth_state.set(AuthState::Error(error));
+        }
+    };
+
     view! {
-        <A
-            href="/action-types"
-            attr:class="profile-button"
-            attr:aria-label="Open your action types"
+        <button
+            class="profile-button"
+            type="button"
+            node_ref=trigger
+            aria-haspopup="dialog"
+            aria-controls="account-menu-dialog"
+            aria-expanded=move || expanded.get().to_string()
+            aria-label="Open account menu"
+            on:click=open
         >
             {move || view! { <ProfileImage picture=picture() /> }}
-        </A>
+        </button>
+
+        <dialog
+            class="menu-dialog"
+            id="account-menu-dialog"
+            node_ref=dialog
+            aria-label="Account menu"
+            on:close=dismissed
+        >
+            <button
+                class="icon-dialog-close menu-close"
+                type="button"
+                aria-label="Close menu"
+                on:click=move |_| close()
+            >
+                <Close />
+            </button>
+
+            <div class="menu-list">
+                // `/actions` has no screen yet and resolves to the router's
+                // `NotFound` fallback — reachable by design, the same way a
+                // dashboard row's repeat link is.
+                <A href="/actions" attr:class="menu-link">
+                    <span class="menu-icon" aria-hidden="true"><Pulse /></span>
+                    <span>"Action"</span>
+                </A>
+                <A href="/action-types" attr:class="menu-link">
+                    <span class="menu-icon" aria-hidden="true"><Tag /></span>
+                    <span>"Action Type"</span>
+                </A>
+            </div>
+
+            <hr class="menu-separator" />
+
+            <button class="menu-link menu-logout" type="button" on:click=sign_out>
+                <span class="menu-icon" aria-hidden="true"><LogOut /></span>
+                <span>"Log out"</span>
+            </button>
+        </dialog>
     }
 }
 

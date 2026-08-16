@@ -14,6 +14,8 @@
   --app-width: 430px;
   --client-gutter: 26px;
   --top-row-height: 42px;
+  /* golden ratio: app-width / phi (1.618) ≈ 266px */
+  --menu-width: 266px;
 
   --space-2xs: 4px;
   --space-xs: 6px;
@@ -222,6 +224,126 @@ main {
 img.profile-image,
 img.account-image {
   object-fit: cover;
+}
+
+/* --- Account menu ---------------------------------------------------------
+ *
+ * A native dialog, styled the same way `.confirm-dialog` and `.icon-dialog`
+ * are: shown with `showModal`, dismissed with `close()`, its own backdrop
+ * rather than a hand-rolled overlay. The difference is position — pinned to
+ * the right edge and full height, rather than centred, so it reads as a menu
+ * sliding in beside the avatar that opened it. */
+
+.menu-dialog {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: var(--menu-width);
+  max-width: calc(100% - var(--space-xl));
+  height: 100%;
+  max-height: 100dvh;
+  margin: 0;
+  padding: var(--space-lg) var(--space-md);
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: -18px 0 55px rgba(41, 21, 28, 0.18);
+}
+
+/* `display` lives here, not on the bare selector: the dialog's own UA
+   stylesheet is what makes `close()` hide it (`dialog:not([open])
+   { display: none; }`), and an unconditional `display: flex` above would
+   outrank that rule every time, leaving the menu on screen after closing. */
+.menu-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  animation: menu-in 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.menu-dialog::backdrop {
+  background: rgba(41, 21, 28, 0.46);
+  backdrop-filter: blur(var(--space-2xs));
+  -webkit-backdrop-filter: blur(var(--space-2xs));
+}
+
+.menu-close {
+  margin-left: auto;
+}
+
+.menu-list {
+  display: grid;
+  margin-top: var(--space-md);
+  gap: var(--space-2xs);
+}
+
+.menu-link {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--space-md);
+  color: var(--ink);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.menu-link:hover {
+  background: var(--rose-100);
+}
+
+.menu-link:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+
+.menu-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.menu-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.menu-separator {
+  margin: var(--space-sm) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* Not the destructive red `.delete-button` uses: signing out loses nothing,
+   so it only needs to read as distinct from ordinary navigation. */
+.menu-logout {
+  color: var(--accent-dark);
+}
+
+@keyframes menu-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 /* --- Page heading -------------------------------------------------------- */
