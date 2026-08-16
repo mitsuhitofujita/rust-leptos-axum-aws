@@ -8,7 +8,13 @@
 use axum::Json;
 use shared::{ActionRecord, ActionType, Dashboard, RecentSummary};
 
-pub async fn dashboard() -> Json<Dashboard> {
+use crate::identity::Owner;
+
+/// `Owner` is unused today because the values below are fixed, but the
+/// extractor is what gates the route — a handler that does not name it is
+/// reachable by anyone with no token, since gating moved from the route
+/// table to the handler's own signature (DR-0028).
+pub async fn dashboard(Owner(_owner): Owner) -> Json<Dashboard> {
     // The counts are per day, oldest first, and their sum is the total the
     // summary card reports. It is deliberately larger than the ten records
     // below: the ten-day window and the recent list are separate limits.

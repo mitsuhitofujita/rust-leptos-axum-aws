@@ -33,24 +33,25 @@ web-sys = "0.3.103"
 axum = "0.8.9"
 tokio = "1.53.1"
 
-# The forwarding leg of crates/devgateway, and the hyper client underneath it.
-# Both are already in Cargo.lock as dependencies of axum, so declaring this adds
-# feature flags and no packages. The forwarding leg is plain HTTP to loopback;
-# the TLS below is for the one outbound call that is not.
+# The HTTP client crates/server's JWKS fetch (identity::Auth::from_environment,
+# jwks.rs) uses, alongside the hyper-rustls connector below. Already in
+# Cargo.lock as a dependency of axum, so declaring this adds feature flags and
+# no packages.
 hyper-util = "0.1.20"
 
-# The JWKS fetch in crates/devgateway's `cognito` mode, and the RS256 signature
-# check underneath it. Both are already in Cargo.lock beneath aws-sdk-dynamodb —
-# hyper-rustls is how the SDK reaches AWS, and aws-lc-rs is rustls 0.23's default
-# cryptographic backend — so declaring them adds two dependency edges and no
-# packages, and the devcontainer image needs nothing new. DR-0022.
+# The JWKS fetch in crates/server's identity::Auth::Cognito arrangement, and
+# the RS256 signature check underneath it. Both are already in Cargo.lock
+# beneath aws-sdk-dynamodb — hyper-rustls is how the SDK reaches AWS, and
+# aws-lc-rs is rustls 0.23's default cryptographic backend — so declaring them
+# adds two dependency edges and no packages, and the devcontainer image needs
+# nothing new. DR-0028.
 #
 # aws-lc-rs's default features include `ring-io` and `ring-sig-verify`, which are
 # a compatibility surface for code ported from ring and pull in `untrusted` 0.7
-# beside the 0.9 already here. Nothing in devgateway is ported from ring, so they
-# are off and the "no new packages" above is literally true. The cost is that
-# RsaKeyPair::public_key() loses `modulus_len`; `public_modulus_len()` on the key
-# pair itself is the same number.
+# beside the 0.9 already here. Nothing in crates/server is ported from ring, so
+# they are off and the "no new packages" above is literally true. The cost is
+# that RsaKeyPair::public_key() loses `modulus_len`; `public_modulus_len()` on
+# the key pair itself is the same number.
 hyper-rustls = { version = "0.27.9", default-features = false }
 aws-lc-rs = { version = "1.18.0", default-features = false, features = [
     "aws-lc-sys",

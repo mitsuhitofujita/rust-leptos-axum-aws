@@ -914,20 +914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "devgateway"
-version = "0.1.0"
-dependencies = [
- "aws-lc-rs",
- "axum",
- "base64",
- "hyper-rustls 0.27.9",
- "hyper-util",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2569,8 +2555,14 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-lc-rs",
  "aws-sdk-dynamodb",
  "axum",
+ "base64",
+ "hyper-rustls 0.27.9",
+ "hyper-util",
+ "serde",
+ "serde_json",
  "shared",
  "time",
  "tokio",

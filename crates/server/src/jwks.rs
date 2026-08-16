@@ -1,19 +1,21 @@
 //! The user pool's signing keys, and the one thing done with them.
 //!
 //! Cognito publishes them at `{issuer}/.well-known/jwks.json`, which is the same
-//! document `aws_apigatewayv2_authorizer.cognito` reads and the reason the fetch
-//! needs no AWS credentials: the endpoint is public. Credentials are needed to
-//! learn the issuer, not to fetch this.
+//! document `aws_apigatewayv2_authorizer.cognito` read before DR-0028 retired
+//! it, and the reason the fetch needs no AWS credentials: the endpoint is
+//! public. Credentials are needed to learn the issuer, not to fetch this.
 //!
 //! **Fetched once, before the listener binds, and held for the process's
-//! lifetime.** Two things follow from that and both are deliberate. A `kid` that
-//! is not in the set is a refusal and never a second fetch, so a token signed
-//! with anything else cannot turn into a request to Cognito per attempt. And a
-//! pool whose keys have rotated since the process started is a restart, which is
-//! the right cost for a mode a developer runs in the foreground in a terminal.
+//! lifetime.** Two things follow from that and both are deliberate. A `kid`
+//! that is not in the set is a refusal and never a second fetch, so a token
+//! signed with anything else cannot turn into a request to Cognito per
+//! attempt. And a pool whose keys have rotated since the process started
+//! means a Lambda cold start picks them up fresh — the cost is paid once per
+//! execution environment, not per request.
 //!
-//! Fetching eagerly is also what keeps [`crate::edge::decide`] synchronous: by
-//! the time a request arrives there is nothing left to await.
+//! Fetching eagerly is also what keeps [`crate::identity::Auth::from_environment`]
+//! synchronous everywhere but its own construction: by the time a request
+//! arrives there is nothing left to await.
 
 use std::collections::HashMap;
 
@@ -43,10 +45,10 @@ impl Keys {
     /// Read a JWKS document.
     ///
     /// Entries that are not RS256 RSA keys are skipped rather than refused: a
-    /// pool is free to publish others, and this adapter mirrors an authorizer
-    /// that only ever validates RS256. A document from which nothing survives is
-    /// an error, because it is indistinguishable in effect from a wrong URL and
-    /// would otherwise surface much later as an unexplained 401.
+    /// pool is free to publish others, and this only ever validates RS256. A
+    /// document from which nothing survives is an error, because it is
+    /// indistinguishable in effect from a wrong URL and would otherwise
+    /// surface much later as an unexplained 401.
     pub fn parse(document: &[u8]) -> Result<Self, String> {
         #[derive(Deserialize)]
         struct Set {
@@ -175,9 +177,9 @@ mod tests {
         }
     }
 
-    /// The fixture publishes an EC key beside the RSA one. An authorizer that
-    /// only validates RS256 has nothing to do with it, and a parser that refused
-    /// the whole document over it would refuse a pool that is perfectly valid.
+    /// The fixture publishes an EC key beside the RSA one. Something that only
+    /// validates RS256 has nothing to do with it, and a parser that refused the
+    /// whole document over it would refuse a pool that is perfectly valid.
     #[test]
     fn a_key_that_is_not_an_rs256_rsa_key_is_skipped() {
         let keys = keys();
@@ -203,9 +205,8 @@ mod tests {
         assert!(error.contains("not a JWKS document"), "{error}");
     }
 
-    /// The Work Log is explicit that this is a refusal and not a refetch: a
-    /// token signed by anything else must not turn into one request to Cognito
-    /// per attempt.
+    /// A token signed by anything else must not turn into one request to
+    /// Cognito per attempt — it is a refusal and not a refetch.
     #[test]
     fn an_unknown_kid_is_an_error_rather_than_a_fetch() {
         let error = keys()
