@@ -3,7 +3,7 @@ locals {
   # derive from this list, because the two have to agree: a method the routes
   # accept and CORS does not is blocked in the browser, and the reverse is a 404
   # the preflight does not predict.
-  api_methods = ["GET", "POST"]
+  api_methods = ["GET", "POST", "PUT", "DELETE"]
 }
 
 resource "aws_apigatewayv2_api" "this" {
