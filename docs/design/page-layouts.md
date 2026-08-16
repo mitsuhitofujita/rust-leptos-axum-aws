@@ -1,6 +1,6 @@
 # Page Layouts
 
-Updated: 2026-08-10
+Updated: 2026-08-16
 
 ## Purpose
 
@@ -33,11 +33,12 @@ Every screen is a single vertical flow inside the mobile application shell:
 └──────────────────────────────────┘
 ```
 
-The wordmark starts the top row and returns home. Authenticated application
-screens place the user image at its end; that control must provide access to the
-action-type area, whether directly or through an account menu. The home screen
-may keep account identity and logout inside the page body instead. The footer
-follows content rather than remaining fixed over it.
+The wordmark starts the top row and returns home. An authenticated application
+screen places the user image at its end; activating it opens an account menu
+reaching the action-type area, the actions list, and signing out. The home
+screen keeps account identity and logout inside the page body instead, rather
+than behind the same menu. The footer follows content rather than remaining
+fixed over it.
 
 Short screens use the full dynamic viewport and can push the primary action
 toward the bottom. Content-rich screens grow vertically and use normal document
@@ -334,7 +335,7 @@ visual composition has not yet been defined by an HTML reference:
 
 | Screen | Required content and behavior |
 | --- | --- |
-| Actions | List recorded actions. |
+| Actions | List recorded actions. Reached from the account menu; lands on the router's not-found fallback until it exists. |
 | Add action | Select an action type and enter its numeric value; when opened from a dashboard row, preserve the preselected type. |
 
 These screens inherit the shared shell, heading, footer, visual tokens, focus
@@ -359,7 +360,10 @@ Navigation that is part of the current design is:
 signed-out home ── Google sign-in ──▶ signed-in home
 signed-in home ── Open dashboard ──▶ dashboard
 dashboard recent row ──────────────▶ add action (type preselected)
-authenticated avatar ──────────────▶ action-type access
+authenticated avatar ───────────────▶ account menu
+account menu ── Action Type ────────▶ action-type access
+account menu ── Action ─────────────▶ actions (not built; not-found fallback)
+account menu ── Log out ────────────▶ signed-out home
 action types ───────── Add action type ──▶ add action type
 add action type ───── Cancel or created ─▶ action types
 action-type row ────────────────────────▶ edit action type

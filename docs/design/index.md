@@ -68,3 +68,4 @@ Not yet written, because it does not exist yet:
 | [DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md) | The API is packaged as a container image, with the Lambda Web Adapter built in as an extension — narrowed by DR-0027 |
 | [DR-0027](../decisions/DR-0027-the-devcontainer-reaches-the-hosts-container-engine.md) | The devcontainer reaches the host's container engine over its socket |
 | [DR-0028](../decisions/DR-0028-cognito-tokens-are-verified-by-the-service.md) | Cognito tokens are verified by the service, not by API Gateway's authorizer |
+| [DR-0029](../decisions/DR-0029-the-authenticated-avatar-opens-an-account-menu.md) | The authenticated avatar opens an account menu, not a direct link |
