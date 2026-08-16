@@ -10,17 +10,13 @@ without the two Cognito variables, so it sends no token and `/api` calls are
 answered 401 there; one `just deploy-web` replaces it with a build that signs
 in.
 
-Note: the `AuthContext` parameter mapping below is configured and **not yet
-applied**, and the deployed function is still the binary that predates it. The
-two are consistent as they stand. Bringing them forward has a required order —
-see the constraint on it below, which is the one place in this document where
-doing the two steps the wrong way round is worse than doing neither.
-
-Note: this document describes the container-image packaging below as the
-target shape. Neither `infra/api` nor `just deploy-api` has been applied in
-that shape yet — the deployed function is still the zip plus Lambda-layer form.
-`docs/work/2026-08-10-api-artefact-packaging.md` is the record of the
-migration and its outstanding steps.
+Note: the `AuthContext` parameter mapping below and the container-image
+packaging below are both applied — confirmed 2026-08-15 against the real
+deployed function (`GET /health` returns `ok`, `terraform plan` on `infra/api`
+shows no drift). `docs/work/2026-08-10-api-artefact-packaging.md` carries the
+one check this still owes: a real token reaching `/api/action-types`, which
+needs an interactive Cognito sign-in this environment cannot drive on its
+own.
 
 ## Purpose
 

@@ -360,19 +360,24 @@ one production environment this project has. The socket-mount change is
 local, reversible by rebuilding the devcontainer, and touches no AWS trust
 relationship — it goes first.
 
-**Open, not yet done:**
+**Done, 2026-08-15:** the container-engine-client feature (`docker-ce-cli`,
+hand-rolled — see below) and the socket mount are both in
+`.devcontainer/devcontainer.json` and confirmed working: `docker version`
+reaches `Server: Podman Engine 6.1.0` from inside a live devcontainer session,
+with no `sudo` needed — the UID-1000 match holds.
 
-- Add a container-engine-client feature (or a hand-rolled socket mount plus
-  client install) to `.devcontainer/devcontainer.json`.
-- Confirm the socket's group/permissions let the devcontainer's `vscode` user
-  reach it without `sudo`.
-- Run `deploy-api` from inside the devcontainer end to end — build, push,
-  `update-function-code`, `wait function-updated` — against the real ECR
-  repository and function, not just `docker build` in isolation.
+**Still open:**
+
+- The push-and-update leg of `deploy-api` (`docker login`, `push`,
+  `update-function-code`, `wait function-updated`) exercised from inside the
+  devcontainer specifically. The migration has been deployed and confirmed
+  live — see the main Verification section — but only the `docker build` leg
+  was observed running from inside the devcontainer this session; which side
+  ran the rest of the recipe was not.
 - `docs/design/deployment.md`'s "This recipe runs on the host, not in the
   devcontainer" note, and the constraint bullet naming `docker` as a host
-  dependency, need rewriting once this is confirmed working — not before,
-  since the note is accurate until then.
+  dependency, still need rewriting once the push-and-update leg is confirmed
+  too — not before, since the note is accurate until then.
 - Whether this earns its own Decision Record, or is folded into whatever
   record eventually closes this log, is a `work-done` question once it is
   built and checked; DR-0026 already states the host-build arrangement and the
@@ -408,31 +413,40 @@ change: the live session's path was already `/workspaces/rust-leptos-axum-aws`
 before today, not `/workspace`, so nothing that worked before this depended on
 it.
 
-**Not yet verified, and cannot be from here.** This environment cannot rebuild
-its own devcontainer or reach a podman socket from inside itself. Outstanding,
-against the real host:
+**Verified 2026-08-15, from a rebuilt devcontainer with a working session.**
+The rebuild, the socket path, and the client all check out:
 
-- The devcontainer rebuilds cleanly with the new `Dockerfile` layer (the apt
-  repository add, the key fetch, `docker-ce-cli` installing without error).
+- The devcontainer rebuilt cleanly with the new `Dockerfile` layer —
+  `docker-ce-cli` is present and working, so the apt repository add and key
+  fetch succeeded.
 - `/run/user/1000/podman/podman.sock` is in fact where the host's rootless
-  podman socket lives — the comment in `devcontainer.json` names the
-  authoritative way to check, `podman info --format
-  '{{.Host.RemoteSocket.Path}}'` on the host, run once and not yet confirmed
-  against this project's actual host.
+  podman socket lives — `docker version` would not reach a `Server:` block
+  otherwise.
 - `docker version` inside the devcontainer reaches the daemon (`Server:` side
-  populated, not just `Client:`) through the mounted socket.
-- `just deploy-api` run from inside the devcontainer end to end — build, push,
-  `update-function-code`, `wait function-updated` — against the real ECR
-  repository and function.
+  populated: `Podman Engine 6.1.0`), not just `Client:`.
+- `docker build -f infra/api/Dockerfile .` succeeds from inside the
+  devcontainer. The full deploy (`tf-apply` twice, `deploy-api`) has run and
+  is confirmed live — see the Verification section's 2026-08-15 entry — but
+  which side ran `deploy-api` itself (`docker login`, `push`,
+  `update-function-code`) was not observed directly this session, only the
+  build leg was exercised from inside the devcontainer.
+
+**Still open:**
+
+- `docker login` / `docker push` / `aws lambda update-function-code`, the
+  rest of `deploy-api`, exercised from inside the devcontainer specifically —
+  the build leg is confirmed; the push-and-update leg is not yet directly
+  observed running from here.
 - Whether the workspace-path change causes any regression in `trunk serve`,
   bind mounts, or anything else keyed to the container's path — nothing found
   by search depended on the old `/workspaces/rust-leptos-axum-aws` path
   string, but that search covered only `.json`, `.toml`, `Dockerfile` and
-  `justfile`.
+  `justfile`, and nothing since has exercised `trunk serve` specifically to
+  confirm no regression.
 
-`docs/design/deployment.md`'s host-only note for `deploy-api` stays as it
-is until these are confirmed — the note is still accurate today, since the
-change is unverified.
+`docs/design/deployment.md`'s host-only note for `deploy-api` stays as it is
+until the push-and-update leg is confirmed too — the build leg alone is not
+the whole recipe.
 
 ## Verification
 
@@ -457,26 +471,44 @@ checked and is unchanged by anything above:
 | CloudFront root | 200; the SPA is served correctly |
 | Lambda configuration | `provided.al2023`, `x86_64`, adapter layer `LambdaAdapterLayerX86:28`, `AWS_LWA_PORT=3000`, `AWS_LWA_READINESS_CHECK_PATH=/health`, `TABLE_NAME` set, `State: Active` |
 
-Not yet run, because they need a container engine and AWS credentials this
-environment does not have — the actual return on this log, still outstanding:
+### 2026-08-15 — deployed and verified against real AWS
 
-- `docker build -f infra/api/Dockerfile .` on the host, and `objdump -T`
-  against `GLIBC_` inside the built image, confirming the headroom DR-0026
-  claims is structural rather than assumed.
-- `just tf-apply api` with the ECR repository added but the function still on
-  the zip form, then one `just deploy-api` to populate the `latest` tag, then
-  a second `just tf-apply api` to switch `package_type` — the two-step
-  sequence `deployment.md`'s new constraint describes, exercised for the
-  first time.
-- `GET /health` returning `ok` again afterward, and `GET /api/action-types`
-  with a real token reaching the function, which is what this whole log was
-  opened to restore.
+The migration ran: `just tf-apply api` twice (ECR repository first, then the
+`package_type` switch) and one `just deploy-api`. Confirmed directly, from
+inside the devcontainer, with `aws login` reauthenticated:
+
+| Checked | Result |
+| --- | --- |
+| `docker version` from inside the devcontainer | `Server:` side populated (podman 6.1.0) through the mounted socket — the socket-mount change works |
+| `docker build -f infra/api/Dockerfile .` from inside the devcontainer | succeeds |
+| `objdump -T` on the extracted `/var/task/bootstrap`, highest `GLIBC_` symbol required | `2.34` — exactly what `public.ecr.aws/lambda/provided:al2023`'s own `ldd --version` reports, confirming the headroom DR-0026 claims is structural, not assumed |
+| `just tf-plan api` | `No changes. Your infrastructure matches the configuration.` — the two-step apply sequence is fully landed, no drift |
+| `aws_lambda_function.api` state | `package_type = "Image"`, `image_uri` resolved, `code_sha256` matches the image pushed to ECR at the same timestamp |
+| `GET /health` on the API endpoint | **`200 ok`** — the outage this log exists to fix is over |
+| `GET /api/action-types` without a token | `401`, from the service or the authorizer (both are live; see `docs/work/2026-08-15-service-owns-token-verification.md` for which) |
+
+This also closes the engine-access verification opened in "the
+devcontainer/Dockerfile change, made" below: the socket mount, the
+`docker-ce-cli` install, and the podman socket path are all confirmed working
+by the build succeeding from inside the devcontainer, not inferred.
+
+**Not yet run** — the one check this log still owes, and the reason it stays
+open:
+
+- `GET /api/action-types` with a real, valid token reaching the function and
+  being attributed to the token's subject. Obtaining that token needs an
+  interactive sign-in through the Cognito hosted UI (`just dev-web-auth`,
+  DR-0010) — nothing this environment can drive without a browser and a real
+  user. This is the same outstanding check
+  `docs/work/2026-08-11-local-token-verification.md`'s Verification section
+  lists for its own four items; both logs are unblocked by the same action.
 
 ## Retirement
 
-- [x] Design Documents updated — `docs/design/deployment.md`, drafted this
-      session; **awaiting the confirmation `docs/README.md` requires before an
-      overwrite of a Design Document counts as done**
+- [x] Design Documents updated — `docs/design/deployment.md`, drafted and
+      updated again 2026-08-15 to record the migration as applied and
+      verified; **awaiting the confirmation `docs/README.md` requires before
+      an overwrite of a Design Document counts as done**
 - [x] Decision Records written — DR-0026
 - [x] Non-obvious knowledge preserved — the two symbol families' different
       origins and why both are fatal, and cargo fingerprints not seeing a libc
@@ -484,14 +516,13 @@ environment does not have — the actual return on this log, still outstanding:
       build is inside it is DR-0026's Alternatives, naming it as a trap rather
       than a real option; the ECR repository policy's circular-dependency
       avoidance is `infra/api/ecr.tf`'s own comment, beside the code it explains
-- [ ] No durable document depends on this log — not yet true: `deployment.md`'s
-      new top-of-document note and its two-step-apply constraint both cite this
-      log by name, and stay cited until the steps above are actually run and
-      their result recorded directly in `deployment.md` instead
+- [ ] No durable document depends on this log — not yet true:
+      `deployment.md`'s top-of-document note still cites this log by name, for
+      the one check it still owes (a real token reaching `/api/action-types`)
 
-**This log stays open.** The durable layer describes the intended shape
-correctly, but nothing has verified that shape yet, and the currently running
-function has not moved. That gap — between what is documented and what is
-deployed — is exactly what the second top-of-document note in
-`deployment.md` now says in one sentence, and it is what closes this log when
-it stops being true.
+**This log stays open for one reason only.** The migration is applied,
+`GET /health` answers `ok`, and `terraform plan` on `infra/api` shows no
+drift — the outage this log exists to fix is over. What remains is a single
+check that needs an interactive Cognito sign-in this environment cannot
+perform on its own: a real token reaching `/api/action-types` and being
+attributed to its subject. That closes this log when it runs.
