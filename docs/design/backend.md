@@ -115,11 +115,20 @@ icon must be a name in `shared::icon_names`, the same catalog the picker was
 generated from — the picker is the only control surface that offers one, but a
 request need not have come from it (DR-0014, DR-0019).
 
-**Failures.** `action_types::Failure` separates the two kinds. A rejected
+**Failures.** `action_types::Failure` separates three kinds. A rejected
 request answers `400` with the reason in plain words, because that reason is
-what the screen shows; a store that did not answer is logged and answered `500`
-with a sentence the visitor can do nothing with, because there is nothing they
-could do.
+what the screen shows; an id that names nothing in the caller's own
+partition — including one that names something in someone else's — answers
+`404`, likewise in plain words; a store that did not answer is logged and
+answered `500` with a sentence the visitor can do nothing with, because there
+is nothing they could do.
+
+An update is conditioned on the item already existing
+(`attribute_exists(pk)` in DynamoDB terms), so a `PUT` against an id nothing
+owns answers `404` rather than creating an item at that key. A delete is not
+conditioned: `DeleteItem` is naturally idempotent, and nothing in the design
+needs to tell "already gone" apart from "gone now," so a second `DELETE` for
+the same id still answers `204`.
 
 ## Interfaces
 
@@ -131,6 +140,9 @@ could do.
 | `GET /api/dashboard` | `shared::Dashboard`, from hardcoded values |
 | `GET /api/action-types` | `shared::ActionType[]`, oldest first |
 | `POST /api/action-types` | `201` and the stored `shared::ActionType`, from a `shared::NewActionType` |
+| `GET /api/action-types/{id}` | The stored `shared::ActionType`, or `404` outside the caller's own partition |
+| `PUT /api/action-types/{id}` | The updated `shared::ActionType`, from a `shared::NewActionType`, or `404` |
+| `DELETE /api/action-types/{id}` | `204`, whether or not `id` was there |
 
 No CORS layer. Development is single-origin through the trunk proxy, and
 production is answered by the HTTP API rather than here (DR-0009). A new method

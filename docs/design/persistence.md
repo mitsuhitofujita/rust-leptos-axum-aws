@@ -99,9 +99,9 @@ reader never has to parse the key to display an item.
 | Screen | Query |
 | --- | --- |
 | Action types list | `pk = USER#<sub>` and `begins_with(sk, "TYPE#")` — implemented |
-| Edit action type | `GetItem` on `pk`, `sk = TYPE#<id>` |
+| Edit action type | `GetItem` on `pk`, `sk = TYPE#<id>` — implemented |
 | Create a type | `PutItem` on that key — implemented |
-| Edit / delete a type | `UpdateItem`, `DeleteItem` on that key |
+| Edit / delete a type | `UpdateItem`, `DeleteItem` on that key — implemented |
 | Dashboard, ten recent records | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending, limit 10 |
 | Dashboard, ten-day summary | `pk = USER#<sub>` and `sk BETWEEN "RECORD#<from>" AND "RECORD#<to>"` |
 | Add action | `PutItem` |
