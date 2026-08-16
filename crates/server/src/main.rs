@@ -65,9 +65,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth = Arc::new(Auth::from_environment().await?);
     println!("callers are authenticated by {}", auth.describe());
 
-    let state = AppState { store, auth };
+    let app = router(AppState { store, auth });
 
-    let app = Router::new()
+    let listener = tokio::net::TcpListener::bind(ADDRESS).await?;
+    println!("API listening on http://{}", listener.local_addr()?);
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
+/// Separate from [`main`] so that a test can drive it with
+/// `tower::ServiceExt::oneshot` instead of a bound listener — see the
+/// `#[cfg(test)] mod tests` below and `testing.md`.
+fn router(state: AppState) -> Router {
+    Router::new()
         .route("/health", get(health))
         .route("/api/dashboard", get(dashboard::dashboard))
         .route(
@@ -80,17 +91,221 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .put(action_types::update)
                 .delete(action_types::delete),
         )
-        .with_state(state);
-
-    let listener = tokio::net::TcpListener::bind(ADDRESS).await?;
-    println!("API listening on http://{}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
-
-    Ok(())
+        .with_state(state)
 }
 
 /// What the Lambda Web Adapter's readiness check asks for, and what a probe
 /// gets. Deliberately unauthenticated, and it reveals nothing.
 async fn health() -> &'static str {
     "ok"
+}
+
+/// Drives the real [`router`] with `tower::ServiceExt::oneshot` — in-process,
+/// no listener, no network. What every other test in this crate calls
+/// directly (`validate()`, a `Store` method, `mock_caller()`) is exercised
+/// here as an HTTP request instead, so routing, extraction and (de)serialisation
+/// are checked once, at the boundary that actually receives them — testing.md.
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use serde_json::{Value, json};
+    use tower::ServiceExt;
+
+    use super::*;
+    use crate::cognito::{Verification, Verifier};
+    use crate::jwks::Keys;
+    use crate::testkey;
+
+    fn memory_state(auth: Auth) -> AppState {
+        AppState {
+            store: Arc::new(Store::Memory(Mutex::new(HashMap::new()))),
+            auth: Arc::new(auth),
+        }
+    }
+
+    /// Both headers `Auth::Mock` reads for a named caller — DR-0028.
+    fn mock_caller(request: Request<Body>, subject: &str) -> Request<Body> {
+        let (mut parts, body) = request.into_parts();
+        parts.headers.insert("x-auth-edge", "test".parse().unwrap());
+        parts
+            .headers
+            .insert("x-auth-subject", subject.parse().unwrap());
+        Request::from_parts(parts, body)
+    }
+
+    fn cognito_verifier() -> Verifier {
+        Verifier {
+            verification: Verification {
+                issuer: testkey::ISSUER.to_owned(),
+                audience: testkey::AUDIENCE.to_owned(),
+            },
+            keys: Keys::parse(testkey::JWKS.as_bytes()).unwrap(),
+        }
+    }
+
+    /// A well-formed access token whose `exp` is against the real clock —
+    /// `identity::tests::current_token` is the same fixture, duplicated
+    /// rather than shared because each test module here already keeps its
+    /// own, `cognito.rs` and `jwks.rs` included.
+    fn current_token() -> String {
+        testkey::sign(
+            &format!(r#"{{"alg":"RS256","kid":"{}"}}"#, testkey::KID),
+            &format!(
+                r#"{{"sub":"abc-123","iss":"{}","client_id":"{}","token_use":"access","exp":{}}}"#,
+                testkey::ISSUER,
+                testkey::AUDIENCE,
+                crate::cognito::unix_time() + 3600,
+            ),
+        )
+    }
+
+    async fn json_body(response: axum::response::Response) -> Value {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn health_is_reachable_with_no_auth_at_all() {
+        let app = router(memory_state(Auth::Mock));
+
+        let response = app
+            .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// The end-to-end path every other test reaches into: a real JSON body,
+    /// routed, extracted, validated, stored, and answered as JSON — then read
+    /// back through a second request, which is what proves the first one
+    /// reached the store and not just the handler's return value.
+    #[tokio::test]
+    async fn creating_and_then_listing_goes_through_the_router() {
+        let app = router(memory_state(Auth::Mock));
+
+        let create = mock_caller(
+            Request::post("/api/action-types")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"name": "Running", "unit": "km", "icon": "footprints"}).to_string(),
+                ))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(create).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created = json_body(response).await;
+        assert_eq!(created["name"], "Running");
+
+        let list = mock_caller(
+            Request::get("/api/action-types")
+                .body(Body::empty())
+                .unwrap(),
+            "alice",
+        );
+        let response = app.oneshot(list).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let listed = json_body(response).await;
+        assert_eq!(listed, json!([created]));
+    }
+
+    /// Nothing in `action_types::validate` runs: the body never reaches the
+    /// handler at all, because `Json<NewActionType>` fails to extract. Axum's
+    /// own rejection answers this, not `action_types::Failure`.
+    #[tokio::test]
+    async fn a_malformed_json_body_is_a_400_not_a_500() {
+        let app = router(memory_state(Auth::Mock));
+
+        let request = mock_caller(
+            Request::post("/api/action-types")
+                .header("content-type", "application/json")
+                .body(Body::from("not json"))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// A path the router knows, with a method none of its handlers answer —
+    /// axum's own routing, not anything this crate wrote.
+    #[tokio::test]
+    async fn an_unmapped_method_is_405() {
+        let app = router(memory_state(Auth::Mock));
+
+        let request = mock_caller(
+            Request::patch("/api/action-types")
+                .body(Body::empty())
+                .unwrap(),
+            "alice",
+        );
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    /// `identity::tests::an_edge_that_named_nobody_is_refused` checks
+    /// `mock_caller()` in isolation; this checks that the rejection it
+    /// produces actually reaches the visitor as `401` once axum's
+    /// `IntoResponse` machinery is in the loop.
+    #[tokio::test]
+    async fn an_edge_naming_nobody_is_401_through_the_router() {
+        let app = router(memory_state(Auth::Mock));
+
+        let (mut parts, body) = Request::get("/api/action-types")
+            .body(Body::empty())
+            .unwrap()
+            .into_parts();
+        parts.headers.insert("x-auth-edge", "test".parse().unwrap());
+        let request = Request::from_parts(parts, body);
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// `identity::tests::no_token_under_cognito_is_refused_not_the_development_owner`
+    /// checks the extractor function directly; this is the same rule through
+    /// the router `Auth::Cognito` actually runs under.
+    #[tokio::test]
+    async fn a_missing_token_under_cognito_is_401_through_the_router() {
+        let app = router(memory_state(Auth::Cognito(cognito_verifier())));
+
+        let response = app
+            .oneshot(
+                Request::get("/api/action-types")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn a_verified_cognito_token_reaches_the_handler() {
+        let app = router(memory_state(Auth::Cognito(cognito_verifier())));
+
+        let response = app
+            .oneshot(
+                Request::get("/api/action-types")
+                    .header("authorization", format!("Bearer {}", current_token()))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json_body(response).await, json!([]));
+    }
 }

@@ -33,6 +33,12 @@ web-sys = "0.3.103"
 axum = "0.8.9"
 tokio = "1.53.1"
 
+# crates/server's router-level tests: `tower::ServiceExt::oneshot` drives the
+# real `Router` in-process, no listener and no network. Already in Cargo.lock
+# beneath axum, so declaring it with only the `util` feature adds a dependency
+# edge and no packages — testing.md.
+tower = { version = "0.5.3", default-features = false }
+
 # The HTTP client crates/server's JWKS fetch (identity::Auth::from_environment,
 # jwks.rs) uses, alongside the hyper-rustls connector below. Already in
 # Cargo.lock as a dependency of axum, so declaring this adds feature flags and

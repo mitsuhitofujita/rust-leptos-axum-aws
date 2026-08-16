@@ -164,6 +164,40 @@ dev-api-dynamo:
     AWS_SECRET_ACCESS_KEY=local \
         cargo run -p server
 
+# Unlike dev-api-dynamo, this owns the DynamoDB Local instance it needs rather
+# than expecting `just dynamo`/`just dynamo-table` already running in another
+# terminal, so it can run unattended — one command, no setup, and it stops
+# what it started on the way out, success or failure. dynamo-stop does the
+# stopping, so this does not need to know the pid `just dynamo &` backgrounded
+# under, only that dynamo-stop can always find it by scanning /proc — see the
+# comment above that recipe. The tests themselves are crates/server/src/store.rs's
+# `dynamo_tests` — testing.md.
+
+# Run the DynamoDB-backed store tests against a freshly started DynamoDB Local.
+test-dynamo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    just dynamo >/dev/null 2>&1 &
+    trap 'just dynamo-stop >/dev/null' EXIT
+
+    ready=""
+    for _ in $(seq 1 30); do
+        if just dynamo-table >/dev/null 2>&1; then
+            ready=1
+            break
+        fi
+        sleep 1
+    done
+    [ -n "$ready" ] || { echo "DynamoDB Local did not become ready within 30s"; exit 1; }
+
+    TABLE_NAME="{{dynamo_table}}" \
+    AWS_ENDPOINT_URL_DYNAMODB="{{dynamo_endpoint}}" \
+    AWS_REGION="{{dynamo_region}}" \
+    AWS_ACCESS_KEY_ID=local \
+    AWS_SECRET_ACCESS_KEY=local \
+        cargo test -p server -- --ignored
+
 # --- Local verification of a real Cognito token -----------------------------
 #
 # The service verifies the token itself now — DR-0028 retired the separate

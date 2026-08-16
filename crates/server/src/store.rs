@@ -545,3 +545,140 @@ mod tests {
             .unwrap();
     }
 }
+
+/// The `Dynamo` variant, run against DynamoDB Local instead of `Memory` —
+/// `just test-dynamo` starts it, creates the table, and runs these. Ignored by
+/// default so `just test`/`cargo test --workspace` stays independent of Java
+/// and a running table (DR-0020, testing.md).
+///
+/// These repeat a subset of the `Memory` tests above rather than covering new
+/// behaviour: the point is that the same assertions hold against the real
+/// `Query`/`GetItem`/`UpdateItem`/`DeleteItem` encoding, not the `Vec`/`HashMap`
+/// standing in for it. Each test uses a freshly minted owner so repeated runs
+/// against a table that outlives one `cargo test` invocation cannot collide —
+/// `just dynamo`'s `-inMemory` normally makes that moot, but nothing here
+/// depends on that.
+#[cfg(test)]
+mod dynamo_tests {
+    use super::*;
+
+    /// Panics with a pointer to `just test-dynamo` rather than silently
+    /// falling back to `Memory`, which `Store::from_environment` would do if
+    /// `TABLE_NAME` were unset — the one outcome that would make every test
+    /// below pass without checking anything.
+    async fn dynamo_store() -> Store {
+        assert!(
+            std::env::var(TABLE_NAME).is_ok(),
+            "{TABLE_NAME} is not set — run `just test-dynamo`, which starts \
+             DynamoDB Local, creates the table, and sets the environment \
+             these tests need before running them"
+        );
+        let store = Store::from_environment().await;
+        assert!(
+            matches!(store, Store::Dynamo { .. }),
+            "TABLE_NAME is set but Store::from_environment chose Memory anyway"
+        );
+        store
+    }
+
+    fn unique_owner(label: &str) -> String {
+        format!("test-{label}-{}", Ulid::generate())
+    }
+
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn keeps_query_order_per_owner() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("query-order");
+
+        for name in ["Running", "Water"] {
+            store
+                .create_action_type(
+                    &owner,
+                    NewActionType {
+                        name: name.to_owned(),
+                        unit: "km".to_owned(),
+                        icon: "footprints".to_owned(),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let types = store.list_action_types(&owner).await.unwrap();
+        let names: Vec<&str> = types.iter().map(|one| one.name.as_str()).collect();
+        assert_eq!(names, ["Running", "Water"]);
+    }
+
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn a_fetched_type_is_none_outside_its_owners_partition() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("partition");
+        let created = store
+            .create_action_type(
+                &owner,
+                NewActionType {
+                    name: "Running".to_owned(),
+                    unit: "km".to_owned(),
+                    icon: "footprints".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            store
+                .get_action_type("someone-else", &created.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .get_action_type(&owner, &created.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .name,
+            "Running"
+        );
+    }
+
+    /// Exercises `condition_expression("attribute_exists(pk)")` and the
+    /// `ConditionalCheckFailedException` branch — nothing in `Memory` models
+    /// this at all, since a `HashMap` lookup has no separate conditional path.
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn updating_a_stranger_to_the_partition_answers_none() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("update-stranger");
+
+        let result = store
+            .update_action_type(
+                &owner,
+                "not-a-real-id",
+                NewActionType {
+                    name: "Jogging".to_owned(),
+                    unit: "mi".to_owned(),
+                    icon: "timer".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn deleting_a_type_that_is_not_there_is_not_an_error() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("delete-missing");
+
+        store
+            .delete_action_type(&owner, "not-a-real-id")
+            .await
+            .unwrap();
+    }
+}
