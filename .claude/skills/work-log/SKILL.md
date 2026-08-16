@@ -15,6 +15,7 @@ allowed-tools: Bash(date *) Bash(git branch *) Bash(ls *) Read Write
 - Open Work Logs: !`ls -1 docs/work/ 2>/dev/null || echo "(none)"`
 - Design Documents: !`ls -1 docs/design/ 2>/dev/null || echo "(none)"`
 - Recent Decision Records: !`ls -1 docs/decisions/ 2>/dev/null | tail -5 || echo "(none)"`
+- Retrospectives: !`ls -1 docs/retrospectives/ 2>/dev/null || echo "(none)"`
 
 ## The request
 
@@ -56,12 +57,30 @@ Design Documents covering the affected area. Read a Decision Record when the
 request would reverse or bump into something already decided. Do not read old
 Work Logs unless the durable documents genuinely fail to answer a question.
 
+**Check `docs/retrospectives/` for standing advice.** These are dated opinions
+about how the project's own decisions have gone — not part of the durable
+layer's citation chain, but worth a skim when planning new work, especially
+their Try sections. If one is directly relevant to this request, say what it
+changed about the plan.
+
 **Create the file** at `docs/work/YYYY-MM-DD-<slug>.md`, using today's date above
 and a short hyphenated slug describing the work. Follow the template exactly.
 
 **Write Interpretation carefully.** State what is being asked, what is explicitly
 out of scope, and every assumption you are making. Assumptions belong here even
 when they seem obvious — this section is where a misread gets caught cheaply.
+
+**Flag a plan step that rests on an unverified assumption about an external
+system.** If a step exists to support behaviour that has not been directly
+observed — how a cloud service actually responds, what a dependency actually
+emits — say so in Interpretation, and prefer confirming that behaviour with the
+smallest possible check before proposing durable supporting code built around
+it. This project has paid for the alternative before: a whole crate was built
+and extended across two Decision Records to reproduce an AWS component's
+behaviour locally, then retracted once the reproduction's cost turned out to
+have no natural end — see
+`docs/decisions/DR-0023-aws-behaviour-is-not-reimplemented-locally.md` and the
+retrospectives above.
 
 **Ask about anything genuinely ambiguous.** Then append what the answers
 established to the Request section, in English, under a `### Clarifications`

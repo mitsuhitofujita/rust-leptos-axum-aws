@@ -16,6 +16,7 @@ allowed-tools: Bash(date *) Bash(git branch *) Bash(git status *) Bash(git diff 
 - Plans: !`ls -1 docs/plans/ 2>/dev/null || echo "(none)"`
 - Design Documents: !`ls -1 docs/design/ 2>/dev/null || echo "(none)"`
 - Decision Records: !`ls -1 docs/decisions/ 2>/dev/null || echo "(none)"`
+- Retrospectives: !`ls -1 docs/retrospectives/ 2>/dev/null || echo "(none)"`
 - Uncommitted changes: !`git status --short 2>/dev/null || echo "(none)"`
 - Diff summary: !`git diff HEAD --stat 2>/dev/null || echo "(none)"`
 
@@ -63,6 +64,13 @@ not, and this working record is about to be deleted.
 
 Routine implementation choices do not warrant a record. Do not pad the set.
 
+Watch in particular for a new hand-maintained duplicate: a value copied because
+nothing on one side can read the other — a `justfile` constant mirroring a
+Terraform variable, a local re-implementation of a remote schema. This project
+already carries several, none with anything that detects when they drift, and
+each was worth naming as a Consequence when it was introduced. Do the same here
+rather than letting a new one pass unremarked.
+
 **Present the candidate list and wait for confirmation before writing anything.**
 For each candidate give one line: the decision, and which test above it meets.
 
@@ -91,9 +99,26 @@ What this makes easy, what it makes hard, what reversing it would cost.
 ```
 
 Write the reasoning as it stood when the decision was made, not as it looks with
-hindsight. If this work reverses an existing decision, write the new record and
-ask before touching the old one — the only permitted edit to an existing record
-is its Status line, changed to `superseded by DR-NNNN`.
+hindsight. If this work changes what an existing record asserts, write the new
+record and ask before touching the old one — the only permitted edit to an
+existing record is its Status line.
+
+Two outcomes are attested in this project's history and are not the same edit:
+
+- **`superseded by DR-NNNN`** — nothing in the old record's Decision holds
+  anymore; a reader arriving at it should treat it as history only.
+- **`narrowed by DR-NNNN`** — the old record's core reasoning and decision still
+  hold; only a specific claim within it has been corrected or scoped down. Say
+  which claim, either on the Status line itself when it is one sentence
+  (`accepted — <the specific claim> is narrowed by DR-NNNN`) or in the new
+  record's Consequences when it needs more room.
+
+Do not default to `superseded` out of caution. Marking a record superseded when
+most of it still holds erases reasoning a future reader would otherwise still be
+able to trust. When one piece of work affects several existing records, judge
+each independently — a record that is fully replaced and one that only loses a
+placement detail are not the same kind of edit, even when both changes are
+explained in the same new record's Consequences section.
 
 ## Update the Design Documents
 
@@ -108,6 +133,15 @@ ever different.
 Where the current shape exists for a non-obvious reason, state the constraint
 plainly and cite the Decision Record. Do not retell the story in the Design
 Document; that is what the citation is for.
+
+**A procedure proven necessary under pressure belongs here too, not only in the
+Decision Record's prose.** If closing this work required working out a specific
+safe sequence — a migration ordering, a rollback step, a way to keep an
+intermediate state fail-closed — and the same shape of change could plausibly
+recur, restate it as an explicit step or Constraint in the relevant Design
+Document. A Decision Record preserves why it was necessary once; a Design
+Document is where the next person doing something similar will actually look
+for how.
 
 Updating these documents overwrites existing content, and an overwrite can
 quietly erase intent nobody remembers to restore. **Show the proposed changes and
