@@ -83,6 +83,7 @@ against without a deployment — DR-0020.
 | `lint` | clippy for both targets, warnings denied |
 | `fmt` / `fmt-check` | rustfmt |
 | `test` | `cargo test --workspace` |
+| `test-dynamo` | the DynamoDB-backed `Store` tests, `#[ignore]`d by default — starts DynamoDB Local itself, waits for it, runs them, and stops it again (testing.md, DR-0030) |
 | `icons` | regenerate the action-type icon catalog from the pinned `lucide-leptos`, and format what it wrote |
 | `clean` | `cargo clean` and remove `dist/` |
 

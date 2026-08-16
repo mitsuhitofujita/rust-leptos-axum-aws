@@ -15,14 +15,14 @@ Web Adapter turns an invocation into an HTTP request on `127.0.0.1:3000`, and
 
 | File | Role |
 | --- | --- |
-| `src/main.rs` | The router, the shared state, and which store and auth arrangement the process is using |
+| `src/main.rs` | The router, the shared state, and which store and auth arrangement the process is using — and, `#[cfg(test)]`, router-level tests against it (testing.md, DR-0031) |
 | `src/identity.rs` | Who the caller is |
 | `src/cognito.rs` | Verifying a Cognito token's signature, issuer, expiry and audience |
 | `src/jwks.rs` | The pool's signing keys: fetch, parse, verify by `kid` |
-| `src/store.rs` | Reading and writing the table |
+| `src/store.rs` | Reading and writing the table, including, `#[cfg(test)]`, opt-in tests against a real DynamoDB Local (testing.md, DR-0030) |
 | `src/action_types.rs` | `/api/action-types`, and what may be stored |
 | `src/dashboard.rs` | `/api/dashboard`, still answering from fixed values |
-| `src/testkey.rs` | A committed RSA fixture the identity/cognito/jwks tests sign with — `#[cfg(test)]` only |
+| `src/testkey.rs` | A committed RSA fixture the identity/cognito/jwks tests, and `main.rs`'s router-level tests, sign with — `#[cfg(test)]` only |
 
 `AppState { store: Arc<Store>, auth: Arc<identity::Auth> }` is the router's
 state, built once at startup. Both the SDK client and the pool's key set are
@@ -194,9 +194,11 @@ code (DR-0020).
 - **The in-memory store is not a second design, and can still drift.** It
   answers from insertion order where DynamoDB answers a `Query` in key order,
   and those agree only because the key embeds a ULID. Anything that changes the
-  key encoding changes both — DR-0018. `cargo test` reaches only the in-memory
-  half; the other one is checked by running `just dev-api-dynamo` by hand, which
-  nothing does automatically — DR-0020.
+  key encoding changes both — DR-0018. Default `cargo test`/`just test` reaches
+  only the in-memory half; the other one is `just test-dynamo`'s
+  `store::dynamo_tests`, opt-in and `#[ignore]`d rather than automatic — DR-0020,
+  DR-0030. `just dev-api-dynamo` remains the manual, interactive check for
+  anything those tests do not assert.
 - **`Scan` is not granted and no access pattern needs one.** Every query is
   inside one owner's partition — `persistence.md`.
 - **The dashboard is not connected to the store.** It answers from values in

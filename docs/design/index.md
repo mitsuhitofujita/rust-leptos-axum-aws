@@ -27,6 +27,7 @@ identities and one DynamoDB table holding the data.
 | [page-layouts.md](page-layouts.md) | Screen inventory, information hierarchy, and navigation intent |
 | [persistence.md](persistence.md) | The DynamoDB table: key encoding, item attributes, the query behind each screen |
 | [deployment.md](deployment.md) | AWS runtime, the Terraform layering, artefact deployment |
+| [testing.md](testing.md) | The automated test strategy: what each crate's tests cover, what stays manual, and why |
 
 Not yet written, because it does not exist yet:
 
@@ -69,3 +70,5 @@ Not yet written, because it does not exist yet:
 | [DR-0027](../decisions/DR-0027-the-devcontainer-reaches-the-hosts-container-engine.md) | The devcontainer reaches the host's container engine over its socket |
 | [DR-0028](../decisions/DR-0028-cognito-tokens-are-verified-by-the-service.md) | Cognito tokens are verified by the service, not by API Gateway's authorizer |
 | [DR-0029](../decisions/DR-0029-the-authenticated-avatar-opens-an-account-menu.md) | The authenticated avatar opens an account menu, not a direct link |
+| [DR-0030](../decisions/DR-0030-dynamodb-store-tests-run-opt-in-and-self-contained.md) | DynamoDB-backed `Store` tests run opt-in, and the recipe that runs them is self-contained |
+| [DR-0031](../decisions/DR-0031-router-level-tests-live-inside-main-rs.md) | Router-level tests for `server` live inside `main.rs`, not a split `lib.rs` |
