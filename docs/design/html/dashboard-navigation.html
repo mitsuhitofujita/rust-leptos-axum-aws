@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Account menu — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --top-row-height: 42px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --font-display: 42px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+        /* golden ratio: app-width / phi (1.618) ≈ 266px */
+        --drawer-width: 266px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        min-height: 100%;
+        background: #f4edef;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      .page-preview {
+        position: fixed;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
+      .nav-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow: hidden;
+        justify-content: flex-end;
+        background: rgba(41, 21, 28, 0.46);
+        backdrop-filter: blur(var(--space-2xs));
+        -webkit-backdrop-filter: blur(var(--space-2xs));
+        animation: veil-in 180ms ease both;
+      }
+
+      .nav-drawer {
+        position: relative;
+        display: flex;
+        width: var(--drawer-width);
+        max-width: 82%;
+        height: 100%;
+        flex-direction: column;
+        padding: var(--space-lg) var(--space-md);
+        background: var(--white);
+        box-shadow: -18px 0 55px rgba(41, 21, 28, 0.18);
+        animation: drawer-in 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .drawer-close {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        margin-left: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        color: var(--accent-dark);
+        background: var(--rose-100);
+        cursor: pointer;
+        place-items: center;
+        transition: background-color 160ms ease;
+      }
+
+      .drawer-close:hover {
+        background: var(--rose-200);
+      }
+
+      .drawer-close:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.28);
+        outline-offset: 3px;
+      }
+
+      .drawer-close svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .account-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin-top: var(--space-md);
+      }
+
+      .account-avatar {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        overflow: hidden;
+        border: 3px solid var(--white);
+        border-radius: 50%;
+        background: var(--accent-soft);
+        box-shadow: 0 4px 13px rgba(111, 36, 60, 0.14);
+        place-items: center;
+      }
+
+      .account-avatar svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .account-copy {
+        display: grid;
+        min-width: 0;
+        gap: var(--space-2xs);
+      }
+
+      .account-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .account-meta {
+        color: #9a7f88;
+        font-size: var(--font-caption);
+        font-weight: 600;
+      }
+
+      .nav-list {
+        display: grid;
+        margin: var(--space-xl) 0 0;
+        padding: 0;
+        gap: var(--space-2xs);
+        list-style: none;
+      }
+
+      .nav-link {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: 0 var(--space-xs);
+        border: 0;
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: transparent;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color 160ms ease;
+      }
+
+      .nav-link:hover {
+        background: var(--rose-100);
+      }
+
+      .nav-link:focus-visible {
+        position: relative;
+        z-index: 1;
+        outline: 3px solid rgba(231, 53, 98, 0.18);
+        outline-offset: -3px;
+      }
+
+      .nav-icon {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        border-radius: var(--space-md);
+        color: var(--accent-dark);
+        background: var(--accent-soft);
+        place-items: center;
+      }
+
+      .nav-icon svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .nav-separator {
+        margin: var(--space-sm) 0;
+        border: 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .nav-logout {
+        color: var(--accent-dark);
+      }
+
+      @keyframes veil-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes drawer-in {
+        from {
+          transform: translateX(100%);
+        }
+        to {
+          transform: translateX(0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      class="page-preview"
+      src="dashboard.html"
+      title="Dashboard page"
+      tabindex="-1"
+      aria-hidden="true"
+      inert
+    ></iframe>
+
+    <div class="nav-layer">
+      <nav class="nav-drawer" aria-label="Account menu">
+        <button class="drawer-close" type="button" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div class="account-summary">
+          <span class="account-avatar" aria-hidden="true">
+            <svg viewBox="0 0 48 48" role="img" aria-label="Alex's profile image">
+              <rect width="48" height="48" fill="#ffdce5" />
+              <circle cx="24" cy="18" r="9" fill="#c94a69" />
+              <path d="M8 48c1.4-10.1 7.1-15.2 16-15.2S38.6 37.9 40 48" fill="#7d2c45" />
+              <path d="M16 16.8c.7-6.5 4.1-9.7 9.8-9.7 5.4 0 8.4 3.7 8.2 9.4-2.9-1.1-5.6-3.2-7.4-5.3-2.5 3.3-6 5.2-10.6 5.6Z" fill="#512432" />
+            </svg>
+          </span>
+          <span class="account-copy">
+            <span class="account-name">Alex</span>
+            <span class="account-meta">Signed in</span>
+          </span>
+        </div>
+
+        <ul class="nav-list">
+          <li>
+            <!-- /actions has no route yet; resolves to 404 until implemented -->
+            <a class="nav-link" href="/actions">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+              </span>
+              <span>Action</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" href="/action-types">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></svg>
+              </span>
+              <span>Action Type</span>
+            </a>
+          </li>
+        </ul>
+
+        <hr class="nav-separator" />
+
+        <button class="nav-link nav-logout" type="button">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
+          </span>
+          <span>Log out</span>
+        </button>
+      </nav>
+    </div>
+  </body>
+</html>
