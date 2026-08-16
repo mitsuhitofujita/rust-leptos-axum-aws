@@ -5,9 +5,10 @@
 //! browser sees a single origin.
 //!
 //! Every call carries the Cognito access token from [`crate::auth`] when there
-//! is one. In production there has to be: API Gateway puts a JWT authorizer in
-//! front of `/api/{proxy+}`. Locally there is not, and the axum server behind
-//! the proxy checks nothing, so the same code path serves both.
+//! is one. In production there has to be: `crates/server` verifies it itself
+//! against the pool (DR-0028). Locally there is not, and the axum server
+//! behind the proxy checks nothing under `Auth::Mock`, so the same code path
+//! serves both.
 
 use std::fmt;
 
@@ -86,7 +87,19 @@ async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, ApiError> {
 
 /// Sends a JSON body and decodes what comes back.
 async fn post_json<B: Serialize, T: DeserializeOwned>(path: &str, body: &B) -> Result<T, ApiError> {
-    let request = authorized(gloo_net::http::Request::post(&url(path)))
+    json_body(gloo_net::http::Request::post(&url(path)), body).await
+}
+
+/// Sends a JSON body as a `PUT` and decodes what comes back.
+async fn put_json<B: Serialize, T: DeserializeOwned>(path: &str, body: &B) -> Result<T, ApiError> {
+    json_body(gloo_net::http::Request::put(&url(path)), body).await
+}
+
+async fn json_body<B: Serialize, T: DeserializeOwned>(
+    request: RequestBuilder,
+    body: &B,
+) -> Result<T, ApiError> {
+    let request = authorized(request)
         .json(body)
         .map_err(|err| ApiError::Other(format!("could not encode the request: {err}")))?;
 
@@ -98,16 +111,25 @@ async fn post_json<B: Serialize, T: DeserializeOwned>(path: &str, body: &B) -> R
     decode(response).await
 }
 
-/// Turns a response into a value or an [`ApiError`].
-///
-/// One place separates 401 from every other failure, so every endpoint below
-/// inherits that treatment rather than restating it.
+/// Sends a `DELETE` with no body. There is nothing to decode from the `204`
+/// this answers with on success, unlike `decode`'s callers.
+async fn delete(path: &str) -> Result<(), ApiError> {
+    let response = authorized(gloo_net::http::Request::delete(&url(path)))
+        .send()
+        .await
+        .map_err(|err| ApiError::Other(format!("request failed: {err}")))?;
+
+    checked(response).await.map(|_| ())
+}
+
+/// Separates 401 from every other failure, so every endpoint below inherits
+/// that treatment rather than restating it.
 ///
 /// A rejected request answers with its reason in the body, and that reason is
 /// what the visitor needs — a screen reporting `400` where it could report
 /// `unit is required` is reporting the wrong thing. The status stands in only
 /// when there is nothing to say.
-async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, ApiError> {
+async fn checked(response: Response) -> Result<Response, ApiError> {
     if response.status() == 401 {
         return Err(ApiError::Unauthorized);
     }
@@ -122,7 +144,13 @@ async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, ApiError> 
         }));
     }
 
-    response
+    Ok(response)
+}
+
+/// Turns a response into a value or an [`ApiError`].
+async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, ApiError> {
+    checked(response)
+        .await?
         .json::<T>()
         .await
         .map_err(|err| ApiError::Other(format!("could not decode the response: {err}")))
@@ -146,4 +174,24 @@ pub async fn fetch_action_types() -> Result<Vec<ActionType>, ApiError> {
 /// identifier the service assigned it.
 pub async fn create_action_type(new: &NewActionType) -> Result<ActionType, ApiError> {
     post_json("/api/action-types", new).await
+}
+
+/// One action type by id, for the edit screen to fill its form from.
+pub async fn fetch_action_type(id: &str) -> Result<ActionType, ApiError> {
+    get_json(&format!("/api/action-types/{id}")).await
+}
+
+/// Saves changes to an action type, and answers with it as stored.
+///
+/// A record that already copied this type's prior name, unit or icon keeps its
+/// copy — DR-0016. Nothing about that is this call's concern; it changes only
+/// the type.
+pub async fn update_action_type(id: &str, new: &NewActionType) -> Result<ActionType, ApiError> {
+    put_json(&format!("/api/action-types/{id}"), new).await
+}
+
+/// Removes an action type. Idempotent, like the `DeleteItem` it becomes: a
+/// second call for the same id is not an error.
+pub async fn delete_action_type(id: &str) -> Result<(), ApiError> {
+    delete(&format!("/api/action-types/{id}")).await
 }

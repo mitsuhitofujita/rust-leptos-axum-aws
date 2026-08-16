@@ -1,5 +1,5 @@
-//! `/api/action-types`: listing what an owner has registered, and registering
-//! one.
+//! `/api/action-types`: listing, creating, reading, updating and deleting what
+//! an owner has registered.
 //!
 //! The owner is never a request parameter. It comes from [`crate::identity`],
 //! which reads it from the claims the authorizer already validated, and that is
@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use shared::{ActionType, NewActionType, icon_names};
@@ -40,6 +40,43 @@ pub async fn create(
     let created = store.create_action_type(&owner, new).await?;
 
     Ok((StatusCode::CREATED, Json(created)))
+}
+
+pub async fn get_one(
+    State(store): State<Arc<Store>>,
+    Owner(owner): Owner,
+    Path(id): Path<String>,
+) -> Result<Json<ActionType>, Failure> {
+    store
+        .get_action_type(&owner, &id)
+        .await?
+        .map(Json)
+        .ok_or_else(Failure::not_found)
+}
+
+pub async fn update(
+    State(store): State<Arc<Store>>,
+    Owner(owner): Owner,
+    Path(id): Path<String>,
+    Json(new): Json<NewActionType>,
+) -> Result<Json<ActionType>, Failure> {
+    let new = validate(new)?;
+
+    store
+        .update_action_type(&owner, &id, new)
+        .await?
+        .map(Json)
+        .ok_or_else(Failure::not_found)
+}
+
+pub async fn delete(
+    State(store): State<Arc<Store>>,
+    Owner(owner): Owner,
+    Path(id): Path<String>,
+) -> Result<StatusCode, Failure> {
+    store.delete_action_type(&owner, &id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// What may be stored.
@@ -91,6 +128,9 @@ fn validate(new: NewActionType) -> Result<NewActionType, Failure> {
 pub enum Failure {
     /// The request was understood and refused. The visitor can fix it.
     Rejected(String),
+    /// The id named nothing in the caller's own partition — including when it
+    /// names something in someone else's.
+    NotFound(String),
     /// The store did not answer. The visitor cannot.
     Unavailable(String),
 }
@@ -98,6 +138,10 @@ pub enum Failure {
 impl Failure {
     fn rejected(reason: &str) -> Self {
         Self::Rejected(reason.to_owned())
+    }
+
+    fn not_found() -> Self {
+        Self::NotFound("That action type could not be found.".to_owned())
     }
 }
 
@@ -111,6 +155,7 @@ impl IntoResponse for Failure {
     fn into_response(self) -> Response {
         match self {
             Self::Rejected(reason) => (StatusCode::BAD_REQUEST, reason).into_response(),
+            Self::NotFound(reason) => (StatusCode::NOT_FOUND, reason).into_response(),
             Self::Unavailable(reason) => {
                 // The reason reaches the log, not the visitor: it is about the
                 // store and there is nothing in it they could act on.
@@ -140,6 +185,7 @@ mod tests {
     fn rejection(new: NewActionType) -> String {
         match validate(new) {
             Err(Failure::Rejected(reason)) => reason,
+            Err(Failure::NotFound(reason)) => panic!("not found: {reason}"),
             Err(Failure::Unavailable(reason)) => panic!("unavailable: {reason}"),
             Ok(_) => panic!("accepted"),
         }

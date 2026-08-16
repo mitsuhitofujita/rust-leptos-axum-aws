@@ -113,6 +113,35 @@ pub fn Check() -> impl IntoView {
     }
 }
 
+/// The tick on the edit screen's "Save changes" button. Distinct from
+/// [`Check`], which is sized for the icon picker's small circular badge rather
+/// than for a full-width button.
+#[component]
+pub fn Checkmark() -> impl IntoView {
+    view! {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m5 12 4 4L19 6" />
+        </svg>
+    }
+}
+
+/// The delete trigger on the edit screen, and the confirmation dialog it opens.
+#[component]
+pub fn Trash() -> impl IntoView {
+    view! {
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+        </svg>
+    }
+}
+
 /// Stands in for a profile image when the id token carried no `picture` claim,
 /// and in an unconfigured build, where there is no account at all.
 #[component]

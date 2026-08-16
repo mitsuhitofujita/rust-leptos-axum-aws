@@ -1,9 +1,8 @@
 //! The axum API.
 //!
-//! Two endpoints answer from the store and one still answers from fixed values.
-//! `/api/action-types` reads and writes the DynamoDB table
-//! `docs/design/persistence.md` describes; `/api/dashboard` does not, and says
-//! so in [`dashboard`].
+//! `/api/action-types` answers from the store; `/api/dashboard` still answers
+//! from fixed values, and says so in [`dashboard`]. The store is the DynamoDB
+//! table `docs/design/persistence.md` describes.
 //!
 //! Every request under `/api` names [`identity::Owner`] in its handler
 //! signature, which is what decides who the caller is and whether they are
@@ -74,6 +73,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/action-types",
             get(action_types::list).post(action_types::create),
+        )
+        .route(
+            "/api/action-types/{id}",
+            get(action_types::get_one)
+                .put(action_types::update)
+                .delete(action_types::delete),
         )
         .with_state(state);
 

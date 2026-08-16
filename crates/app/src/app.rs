@@ -5,7 +5,7 @@ use leptos_router::components::{A, Route, Router, Routes};
 use leptos_router::hooks::use_navigate;
 use leptos_router::path;
 
-use crate::action_types::{ActionTypesPage, NewActionTypePage};
+use crate::action_types::{ActionTypesPage, EditActionTypePage, NewActionTypePage};
 use crate::auth::{self, AuthState};
 use crate::dashboard::DashboardPage;
 use crate::home::{HomePage, ProfileImage};
@@ -86,6 +86,10 @@ pub fn App() -> impl IntoView {
                         <Route
                             path=path!("/action-types")
                             view=|| view! { <RequireAuth><ActionTypesPage /></RequireAuth> }
+                        />
+                        <Route
+                            path=path!("/action-types/:id")
+                            view=|| view! { <RequireAuth><EditActionTypePage /></RequireAuth> }
                         />
                     </Routes>
                 </main>
@@ -208,10 +212,9 @@ pub fn SiteHeader(#[prop(optional)] children: Option<Children>) -> impl IntoView
 
 /// Answers every path the router does not know.
 ///
-/// Two of those paths are reachable by design rather than by mistake: a
-/// dashboard row links to action creation, and an action-type row to editing
-/// that type. Neither screen exists yet, so the links point where they will
-/// eventually go and this answers until they arrive.
+/// One of those paths is reachable by design rather than by mistake: a
+/// dashboard row links to action creation, which has no screen yet. The link
+/// points where it will eventually go and this answers until it arrives.
 #[component]
 fn NotFound() -> impl IntoView {
     view! {
