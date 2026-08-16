@@ -1,22 +1,18 @@
 # Deployment
 
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 Note: all five layers have been applied and their twelve SSM parameters exist.
-The API is deployed and `GET /health` returns `ok`. The table is empty and
-nothing reads or writes it yet — `crates/server` still answers
-`GET /api/dashboard` from hardcoded values. The bundle on CloudFront was built
-without the two Cognito variables, so it sends no token and `/api` calls are
-answered 401 there; one `just deploy-web` replaces it with a build that signs
-in.
-
-Note: the `AuthContext` parameter mapping below and the container-image
-packaging below are both applied — confirmed 2026-08-15 against the real
-deployed function (`GET /health` returns `ok`, `terraform plan` on `infra/api`
-shows no drift). `docs/work/2026-08-10-api-artefact-packaging.md` carries the
-one check this still owes: a real token reaching `/api/action-types`, which
-needs an interactive Cognito sign-in this environment cannot drive on its
-own.
+The API is deployed and `GET /health` returns `ok`. The `AuthContext`
+parameter mapping and the container-image packaging described below are both
+applied and verified end to end against real AWS with a real Cognito access
+token: `POST /api/action-types` answered `201` and the following
+`GET /api/action-types` returned that record, both against the deployed
+function and the real table. `crates/server` still answers
+`GET /api/dashboard` from hardcoded values. The bundle on CloudFront was
+built without the two Cognito variables, so it sends no token and `/api`
+calls are answered 401 there; one `just deploy-web` replaces it with a build
+that signs in.
 
 ## Purpose
 
@@ -288,13 +284,13 @@ to the `api` layer's ECR repository under the `latest` tag, then
 `aws lambda wait function-updated`, since the update call returns before the new
 code is live. No Terraform run is involved.
 
-**This recipe runs on the host, not in the devcontainer.** The devcontainer has
-no container engine, and deployment is intended to move to GitHub Actions later
-rather than have one added to it —
-[DR-0026](../decisions/DR-0026-the-api-is-packaged-as-a-container-image.md).
-`just deploy-web` and `just tf-*` are unaffected and still run from either
-side; this is the one recipe in this document a devcontainer shell cannot
-complete.
+**This recipe runs from either side.** The devcontainer reaches the host's
+podman engine over a mounted socket
+([DR-0027](../decisions/DR-0027-the-devcontainer-reaches-the-hosts-container-engine.md)),
+so `docker build` / `push` / `update-function-code` behave the same whether
+the shell running them is the devcontainer's or the host's. Deployment moving
+to GitHub Actions is still future work, not made moot by this — it replaces a
+person running either shell, not the recipe itself.
 
 ### Configuring the SPA
 
@@ -433,10 +429,11 @@ without running either.
   `objdump -T` over the binary inside the built image, filtered for `GLIBC_`,
   is the check, and tops out at `GLIBC_2.34`.
 
-- **`docker` (or a docker-CLI-compatible engine) is a host dependency of
-  `deploy-api`, not a devcontainer one.** The devcontainer has no container
-  engine, so the image is built and pushed from the host — see "Deploying
-  artefacts" above.
+- **`docker` (or a docker-CLI-compatible engine) is available on both sides.**
+  The devcontainer carries the client and reaches the host's podman engine
+  over a mounted socket — [DR-0027](../decisions/DR-0027-the-devcontainer-reaches-the-hosts-container-engine.md)
+  — so `deploy-api` is not a host-only recipe; see "Deploying artefacts"
+  above.
 
 - **The project name is spelled out in the `justfile` as well as in every
   layer's `variables.tf`.** The deploy recipes address SSM paths rooted at that

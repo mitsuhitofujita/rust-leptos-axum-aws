@@ -1,5 +1,5 @@
 # DR-0026: The API is packaged as a container image, with the Lambda Web Adapter built in as an extension
-Status: accepted
+Status: accepted — the host-only build/push claim in Decision and Consequences is narrowed by DR-0027
 Date: 2026-08-15
 
 ## Context

@@ -361,12 +361,11 @@ deploy-web:
         --distribution-id "${distribution}" --paths '/*' \
         --query 'Invalidation.Id' --output text
 
-# Build crates/server as a container image and publish it. Runs on the host,
-# not in the devcontainer: the devcontainer has no container engine, and
-# deployment is intended to move to GitHub Actions rather than gain one —
-# docs/work/2026-08-10-api-artefact-packaging.md. Needs `docker` (or a
-# docker-CLI-compatible engine) and the AWS CLI, both resolved on the host's
-# own PATH and credentials, not the devcontainer's.
+# Build crates/server as a container image and publish it. Runs from either
+# the host or the devcontainer: the devcontainer reaches the host's podman
+# engine over a mounted socket — DR-0027. Needs `docker` (or a
+# docker-CLI-compatible engine) and the AWS CLI, resolved on whichever side's
+# own PATH and credentials runs it.
 deploy-api:
     #!/usr/bin/env bash
     set -euo pipefail
