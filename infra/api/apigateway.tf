@@ -12,7 +12,7 @@ resource "aws_apigatewayv2_api" "this" {
 
   # DR-0001 records the missing CORS layer in crates/server as a gap deployment
   # has to close; it is closed here rather than in the service. An HTTP API
-  # answers preflight itself, ahead of any authorizer, but only for an OPTIONS
+  # answers preflight itself, ahead of the route table, but only for an OPTIONS
   # request no route matches — hence the enumerated routes below.
   cors_configuration {
     allow_origins = [local.cloudfront_url]
@@ -22,96 +22,43 @@ resource "aws_apigatewayv2_api" "this" {
   }
 }
 
-# Two integrations to one function, differing only in the headers they map.
-#
-# crates/server reads an AuthContext of its own — a subject, and a marker saying
-# an edge produced it — and knows nothing about API Gateway, a request context or
-# a claim (DR-0024). This is where that conversion happens: parameter mapping is
-# AWS's own mechanism, so nothing here re-implements AWS behaviour, and it runs in
-# the component that is already in front of the service (DR-0025).
-#
-# `overwrite:` is load-bearing. The service trusts these headers only because
-# nothing but the edge can set them, and that is true only because the edge
-# replaces whatever the caller sent on every request.
+# One integration for the whole function. crates/server verifies the
+# Authorization header itself now — DR-0028 — so nothing here maps, overwrites
+# or removes a header; the request reaches the function exactly as the caller
+# sent it, on every route including /health.
 resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.this.id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.api.invoke_arn
   payload_format_version = "2.0"
-
-  request_parameters = {
-    # The authorizer has already run, so this always resolves. If it ever did
-    # not, API Gateway would skip the mapping and the subject would simply be
-    # absent — which is why the marker below is set separately and statically.
-    "overwrite:header.x-auth-subject" = "$context.authorizer.claims.sub"
-
-    # Nothing reads the value; its presence is the assertion. It is what lets the
-    # service tell "no edge spoke, so this is a developer" from "an edge spoke
-    # and could not name the caller, so refuse" — DR-0025.
-    "overwrite:header.x-auth-edge" = "apigateway"
-  }
 }
 
-# /health runs outside the authorizer, where $context.authorizer.claims.sub
-# cannot resolve. A skipped mapping leaves a caller's own header in place, so
-# this integration removes both rather than mapping either — the probe reaches
-# the service with no AuthContext at all, which is what it should have.
-resource "aws_apigatewayv2_integration" "health" {
-  api_id                 = aws_apigatewayv2_api.this.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.api.invoke_arn
-  payload_format_version = "2.0"
-
-  # The value of a `remove:` mapping is a literal pair of single quotes, which is
-  # how AWS spells "no value" here. An actual empty string is sent as null, and
-  # API Gateway drops the mapping instead of storing it — which plans as a change
-  # that applies cleanly and is still pending the next time.
-  request_parameters = {
-    "remove:header.x-auth-subject" = "''"
-    "remove:header.x-auth-edge"    = "''"
-  }
-}
-
-# Validates Cognito access tokens. `audience` is the app client id, which is
-# what a Cognito access token carries in `client_id` and an id token in `aud`.
-resource "aws_apigatewayv2_authorizer" "cognito" {
-  api_id           = aws_apigatewayv2_api.this.id
-  name             = "${local.name}-cognito"
-  authorizer_type  = "JWT"
-  identity_sources = ["$request.header.Authorization"]
-
-  jwt_configuration {
-    issuer   = local.user_pool_issuer
-    audience = [local.app_client_id]
-  }
-}
-
-# Everything the SPA calls sits behind the authorizer. crates/server serves
-# /api/dashboard today; {proxy+} means a new endpoint under /api needs no change
-# here.
+# Everything the SPA calls, verified by crates/server itself. It serves
+# /api/dashboard today; {proxy+} means a new endpoint under /api needs no
+# change here.
 #
-# One route per method rather than a single ANY route: ANY matches OPTIONS too,
-# which would put the JWT authorizer in front of the CORS preflight — and a
-# preflight carries no Authorization header, so it would be answered with a 401
-# and the browser would block the request it precedes. Leaving OPTIONS unrouted
-# is what lets the HTTP API answer it from cors_configuration above. A new method
-# therefore goes in local.api_methods, not here.
+# One route per method rather than a single ANY route: ANY matches OPTIONS
+# too, and an HTTP API only answers preflight itself from cors_configuration
+# above for an OPTIONS request no route matches — an ANY route would instead
+# proxy every preflight to a function with no OPTIONS handler, failing the
+# request the preflight precedes. This held before DR-0028 for a second reason
+# — the JWT authorizer would have intercepted OPTIONS too — which is gone now;
+# this one is not. A new method therefore goes in local.api_methods, not here.
 resource "aws_apigatewayv2_route" "api" {
   for_each = toset(local.api_methods)
 
-  api_id             = aws_apigatewayv2_api.this.id
-  route_key          = "${each.value} /api/{proxy+}"
-  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "${each.value} /api/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
-# Deliberately unauthenticated: /health exists to be probed, and a probe has no
-# token. It returns a constant and reveals nothing.
+# Deliberately unauthenticated: /health exists to be probed, and a probe has
+# no token. crates/server's own handler takes no Owner and reveals nothing;
+# nothing about this route needs to differ from /api's any more.
 resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.this.id
   route_key = "GET /health"
-  target    = "integrations/${aws_apigatewayv2_integration.health.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
 resource "aws_cloudwatch_log_group" "api_gateway" {

@@ -8,7 +8,8 @@ resource "aws_ssm_parameter" "user_pool_id" {
 }
 
 # `endpoint` is the issuer without its scheme, which is not what a JWT `iss`
-# claim looks like — the API's authorizer compares against the full URL.
+# claim looks like — crates/server's own verification compares against the
+# full URL (DR-0028).
 resource "aws_ssm_parameter" "user_pool_issuer" {
   name  = "/${var.project}/identity/user_pool_issuer"
   type  = "String"

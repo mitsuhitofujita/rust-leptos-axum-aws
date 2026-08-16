@@ -37,8 +37,17 @@ resource "aws_lambda_function" "api" {
       AWS_LWA_READINESS_CHECK_PATH = "/health"
       # The table the service reads and writes. Passed rather than derived, so
       # the name lives in one place — the data layer — and travels through SSM
-      # like every other cross-layer value. crates/server does not read it yet.
+      # like every other cross-layer value.
       TABLE_NAME = local.table_name
+
+      # What aws_apigatewayv2_authorizer.cognito's jwt_configuration used to
+      # hold; the service verifies against these directly now (DR-0028).
+      # Passed rather than derived, so the value lives in one place — the
+      # identity layer — and travels through SSM like every other cross-layer
+      # value. Both set is what selects identity::Auth::Cognito over the
+      # header-trusting Auth::Mock at startup.
+      COGNITO_ISSUER   = local.user_pool_issuer
+      COGNITO_AUDIENCE = local.app_client_id
     }
   }
 

@@ -4,7 +4,7 @@ output "user_pool_id" {
 }
 
 output "user_pool_issuer" {
-  description = "The `iss` claim the API's JWT authorizer validates against."
+  description = "The `iss` claim crates/server's own Cognito verification validates against."
   value       = "https://${aws_cognito_user_pool.this.endpoint}"
 }
 
