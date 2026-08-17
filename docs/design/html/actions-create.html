@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Add action — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --top-row-height: 42px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --font-display: 42px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+        --shadow: 0 18px 55px rgba(118, 39, 63, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: #f4edef;
+        scrollbar-gutter: stable;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      a {
+        font: inherit;
+      }
+
+      .app-shell {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow: hidden;
+        flex-direction: column;
+        background: var(--rose-50);
+        box-shadow: var(--shadow);
+        isolation: isolate;
+      }
+
+      .app-shell::before,
+      .app-shell::after {
+        position: absolute;
+        z-index: -1;
+        border: 1px solid var(--rose-200);
+        border-radius: 50%;
+        content: "";
+        opacity: 0.6;
+      }
+
+      .app-shell::before {
+        top: 110px;
+        right: -160px;
+        width: 220px;
+        height: 220px;
+      }
+
+      .app-shell::after {
+        bottom: 96px;
+        left: -178px;
+        width: 220px;
+        height: 220px;
+      }
+
+      main {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        padding: var(--space-lg) var(--client-gutter) var(--space-md);
+      }
+
+      .site-header {
+        display: flex;
+        min-height: var(--top-row-height);
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        text-decoration: none;
+      }
+
+      .wordmark-mark {
+        position: relative;
+        width: var(--space-lg);
+        height: var(--space-lg);
+        border: 2px solid var(--accent);
+        border-radius: 9px;
+        transform: rotate(-7deg);
+      }
+
+      .wordmark-mark::after {
+        position: absolute;
+        right: 5px;
+        bottom: 5px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+      }
+
+      .profile-button {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        overflow: hidden;
+        border: 3px solid var(--white);
+        border-radius: 50%;
+        background: var(--accent-soft);
+        box-shadow: 0 4px 13px rgba(111, 36, 60, 0.14);
+        cursor: pointer;
+        place-items: center;
+        transition:
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .profile-button:hover {
+        box-shadow: 0 7px 18px rgba(111, 36, 60, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .profile-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .profile-image {
+        width: 100%;
+        height: 100%;
+      }
+
+      .page-heading {
+        margin-top: var(--space-lg);
+        animation: enter 500ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin: 0 0 var(--space-md);
+        color: var(--accent-dark);
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 18px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        content: "";
+      }
+
+      h1 {
+        max-width: 350px;
+        margin: 0;
+        font-size: var(--font-display);
+        font-weight: 800;
+        letter-spacing: -0.065em;
+        line-height: 0.98;
+      }
+
+      h1 em {
+        color: var(--accent);
+        font-style: normal;
+      }
+
+      .create-form {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        margin-top: var(--space-lg);
+        animation: enter 580ms 70ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .form-card {
+        display: grid;
+        gap: var(--space-lg);
+        padding: var(--space-lg);
+        border: 1px solid var(--line);
+        border-radius: var(--space-lg);
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: 0 10px 28px rgba(93, 40, 57, 0.055);
+      }
+
+      .field {
+        display: grid;
+        gap: var(--space-xs);
+      }
+
+      .field-label {
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: -0.01em;
+      }
+
+      .text-input {
+        width: 100%;
+        min-height: 56px;
+        padding: 0 var(--space-md);
+        border: 1px solid #e6d6db;
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: var(--white);
+        box-shadow: inset 0 1px 2px rgba(93, 40, 57, 0.025);
+        font-size: var(--font-body);
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease;
+      }
+
+      .text-input::placeholder {
+        color: #b298a0;
+        opacity: 1;
+      }
+
+      .text-input:hover {
+        border-color: #d5aab6;
+      }
+
+      .text-input:focus {
+        border-color: var(--accent);
+        outline: 3px solid rgba(231, 53, 98, 0.18);
+        outline-offset: 2px;
+        box-shadow: 0 5px 14px rgba(93, 40, 57, 0.06);
+      }
+
+      .field-help {
+        margin: var(--space-2xs) 0 0;
+        color: var(--muted);
+        font-size: var(--font-small);
+        line-height: 1.5;
+      }
+
+      .value-input-wrap {
+        position: relative;
+      }
+
+      .value-input {
+        padding-right: 68px;
+      }
+
+      .value-unit {
+        position: absolute;
+        top: 50%;
+        right: var(--space-md);
+        color: var(--muted);
+        font-size: var(--font-small);
+        font-weight: 800;
+        transform: translateY(-50%);
+      }
+
+      .type-select {
+        display: flex;
+        width: 100%;
+        min-height: 68px;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid #e6d6db;
+        border-radius: var(--space-md);
+        color: inherit;
+        background: var(--white);
+        box-shadow: inset 0 1px 2px rgba(93, 40, 57, 0.025);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .type-select:hover {
+        border-color: #d5aab6;
+        box-shadow: 0 5px 14px rgba(93, 40, 57, 0.06);
+        transform: translateY(-1px);
+      }
+
+      .type-select:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .type-select-icon {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        border-radius: var(--space-md);
+        color: var(--accent-dark);
+        background: var(--accent-soft);
+        place-items: center;
+      }
+
+      .type-select-icon svg,
+      .result-icon svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .type-select-copy {
+        display: grid;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .type-select-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .type-select-unit {
+        flex: 0 0 auto;
+        color: var(--accent-dark);
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .type-select-chevron {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        color: var(--accent-dark);
+        background: var(--rose-100);
+        place-items: center;
+      }
+
+      .type-select-chevron svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .type-dialog {
+        width: calc(100% - (2 * var(--client-gutter)));
+        max-width: calc(var(--app-width) - (2 * var(--client-gutter)));
+        max-height: calc(100dvh - (2 * var(--space-md)));
+        margin: auto;
+        padding: var(--space-lg);
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: var(--space-lg);
+        color: var(--ink);
+        background: var(--white);
+        box-shadow: 0 26px 70px rgba(41, 21, 28, 0.28);
+      }
+
+      .type-dialog[open] {
+        animation: enter 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .type-dialog::backdrop {
+        background: rgba(41, 21, 28, 0.46);
+        backdrop-filter: blur(var(--space-2xs));
+        -webkit-backdrop-filter: blur(var(--space-2xs));
+      }
+
+      .type-dialog-header {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: var(--space-md);
+      }
+
+      .type-dialog-label {
+        margin: 0 0 var(--space-xs);
+        color: var(--accent-dark);
+        font-size: var(--font-caption);
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .type-dialog h2 {
+        margin: 0;
+        font-size: var(--font-title);
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        line-height: 1.08;
+      }
+
+      .type-dialog-close {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        color: var(--muted);
+        background: var(--rose-50);
+        cursor: pointer;
+        place-items: center;
+      }
+
+      .type-dialog-close:hover {
+        color: var(--ink);
+        background: var(--rose-100);
+      }
+
+      .type-dialog-close:focus-visible,
+      .type-search:focus-visible,
+      .apply-type-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .type-dialog-close svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .search-field {
+        display: grid;
+        gap: var(--space-xs);
+        margin-top: var(--space-lg);
+      }
+
+      .type-search {
+        width: 100%;
+        min-height: 56px;
+        padding: 0 var(--space-md);
+        border: 1px solid #e6d6db;
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: var(--rose-50);
+        font-size: var(--font-body);
+      }
+
+      .type-search::placeholder {
+        color: #b298a0;
+        opacity: 1;
+      }
+
+      .results-meta {
+        margin: var(--space-md) 0 var(--space-xs);
+        color: var(--muted);
+        font-size: var(--font-small);
+        font-weight: 700;
+      }
+
+      .type-results {
+        display: grid;
+        max-height: 42dvh;
+        overflow-y: auto;
+        gap: var(--space-xs);
+        padding: var(--space-2xs);
+        overscroll-behavior: contain;
+      }
+
+      .type-result {
+        position: relative;
+        display: block;
+        cursor: pointer;
+      }
+
+      .type-result input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+      }
+
+      .type-result-surface {
+        display: flex;
+        min-height: 56px;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: var(--space-xs) var(--space-sm);
+        border: 1px solid transparent;
+        border-radius: var(--space-md);
+        background: var(--white);
+        transition:
+          border-color 160ms ease,
+          background-color 160ms ease;
+      }
+
+      .type-result:hover .type-result-surface {
+        background: var(--rose-50);
+      }
+
+      .type-result input:checked + .type-result-surface {
+        border-color: var(--rose-200);
+        background: var(--rose-100);
+      }
+
+      .type-result input:focus-visible + .type-result-surface {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: -1px;
+      }
+
+      .result-icon {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        border-radius: var(--space-md);
+        color: var(--accent-dark);
+        background: var(--accent-soft);
+        place-items: center;
+      }
+
+      .result-copy {
+        display: grid;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .result-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .result-unit {
+        flex: 0 0 auto;
+        color: var(--accent-dark);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .result-check {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        margin-left: var(--space-xs);
+        border-radius: 50%;
+        color: var(--white);
+        background: var(--accent);
+        opacity: 0;
+        place-items: center;
+      }
+
+      .type-result input:checked + .type-result-surface .result-check {
+        opacity: 1;
+      }
+
+      .result-check svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .empty-results {
+        margin: var(--space-md) 0;
+        color: var(--muted);
+        font-size: var(--font-small);
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      .empty-results[hidden],
+      .type-result[hidden] {
+        display: none;
+      }
+
+      .apply-type-button {
+        width: 100%;
+        min-height: 56px;
+        margin-top: var(--space-md);
+        padding: 0 var(--space-md);
+        border: 0;
+        border-radius: var(--space-md);
+        color: var(--white);
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+        font-size: var(--font-body);
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .apply-type-button:disabled {
+        box-shadow: none;
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      @media (max-height: 720px) {
+        .type-dialog {
+          padding: var(--space-md);
+        }
+
+        .search-field {
+          margin-top: var(--space-md);
+        }
+      }
+
+      .form-actions {
+        display: grid;
+        gap: var(--space-sm);
+        margin-top: auto;
+        padding-top: var(--space-xl);
+      }
+
+      .primary-button {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-sm);
+        padding: 0 var(--space-md);
+        border: 0;
+        border-radius: var(--space-md);
+        color: var(--white);
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+        font-size: var(--font-body);
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          background-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .primary-button:hover {
+        background: var(--accent-dark);
+        box-shadow: 0 16px 30px rgba(199, 30, 75, 0.28);
+        transform: translateY(-1px);
+      }
+
+      .primary-button:active {
+        transform: translateY(1px);
+      }
+
+      .primary-button:focus-visible,
+      .cancel-link:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .primary-button svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .cancel-link {
+        display: flex;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--space-sm);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 750;
+        text-decoration: none;
+        transition:
+          color 160ms ease,
+          background-color 160ms ease;
+      }
+
+      .cancel-link:hover {
+        color: var(--accent-dark);
+        background: var(--rose-100);
+      }
+
+      .site-footer {
+        margin: 0 var(--client-gutter);
+        padding: var(--space-md) 0 var(--space-lg);
+        border-top: 1px solid var(--line);
+        color: #a98d96;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-height: 720px) {
+        main {
+          padding-top: var(--space-md);
+        }
+
+        .page-heading,
+        .create-form {
+          margin-top: var(--space-md);
+        }
+
+        .form-card {
+          gap: var(--space-md);
+          padding: var(--space-md);
+        }
+
+        .form-actions {
+          padding-top: var(--space-lg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main>
+        <header class="site-header">
+          <a class="wordmark" href="#" aria-label="actord home">
+            <span class="wordmark-mark" aria-hidden="true"></span>
+            <span>actord</span>
+          </a>
+
+          <button class="profile-button" type="button" aria-label="Open Alex's profile">
+            <svg class="profile-image" viewBox="0 0 48 48" role="img" aria-label="Alex's profile image">
+              <rect width="48" height="48" fill="#ffdce5" />
+              <circle cx="24" cy="18" r="9" fill="#c94a69" />
+              <path d="M8 48c1.4-10.1 7.1-15.2 16-15.2S38.6 37.9 40 48" fill="#7d2c45" />
+              <path d="M16 16.8c.7-6.5 4.1-9.7 9.8-9.7 5.4 0 8.4 3.7 8.2 9.4-2.9-1.1-5.6-3.2-7.4-5.3-2.5 3.3-6 5.2-10.6 5.6Z" fill="#512432" />
+            </svg>
+          </button>
+        </header>
+
+        <section class="page-heading" aria-labelledby="page-title">
+          <p class="eyebrow">Actions</p>
+          <h1 id="page-title">Record a<br /><em>new action.</em></h1>
+        </section>
+
+        <form class="create-form" action="#" method="post">
+          <div class="form-card">
+            <div class="field">
+              <span class="field-label" id="type-field-label">Action type</span>
+              <input type="hidden" name="type-id" value="running" data-type-value />
+              <button
+                class="type-select"
+                id="type-select-trigger"
+                type="button"
+                aria-haspopup="dialog"
+                aria-controls="type-picker-dialog"
+                aria-describedby="type-help"
+                aria-expanded="false"
+                aria-labelledby="type-field-label selected-type-name"
+              >
+                <span class="type-select-icon" data-selected-type-icon aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1" /><path d="m9 20 3-6 3 6" /><path d="m6 8 6 2 6-2" /><path d="M12 10v4" /></svg>
+                </span>
+                <span class="type-select-copy">
+                  <span class="type-select-name" id="selected-type-name" data-selected-type-name>Running</span>
+                </span>
+                <span class="type-select-unit" data-selected-type-unit>km</span>
+                <span class="type-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></span>
+              </button>
+              <p class="field-help" id="type-help">
+                Choose which registered type this record belongs to.
+              </p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="value">Value</label>
+              <div class="value-input-wrap">
+                <input
+                  class="text-input value-input"
+                  id="value"
+                  name="value"
+                  type="number"
+                  inputmode="decimal"
+                  step="any"
+                  placeholder="e.g. 5.2"
+                  autocomplete="off"
+                  aria-describedby="value-help"
+                  required
+                />
+                <span class="value-unit" aria-hidden="true" data-value-unit>km</span>
+              </div>
+              <p class="field-help" id="value-help">
+                Recorded in the unit the action type uses.
+              </p>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span>Record action</span>
+            </button>
+            <a class="cancel-link" href="actions-list.html">Cancel</a>
+          </div>
+        </form>
+      </main>
+
+      <footer class="site-footer">actord</footer>
+    </div>
+    <dialog class="type-dialog" id="type-picker-dialog" aria-modal="true" aria-labelledby="type-picker-title">
+      <div class="type-dialog-header">
+        <div>
+          <p class="type-dialog-label">Action type</p>
+          <h2 id="type-picker-title">Choose a type</h2>
+        </div>
+        <button class="type-dialog-close" type="button" aria-label="Close type picker" data-dialog-close>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+      </div>
+
+      <label class="search-field">
+        <span class="field-label">Search types</span>
+        <input class="type-search" type="search" placeholder="e.g. running" autocomplete="off" data-type-search autofocus />
+      </label>
+
+      <p class="results-meta" aria-live="polite" data-results-meta>6 types</p>
+      <div class="type-results" role="radiogroup" aria-label="Your action types">
+        <label class="type-result" data-type-option data-label="Running" data-unit="km">
+          <input type="radio" name="picker-type" value="running" checked />
+          <span class="type-result-surface">
+            <span class="result-icon" data-picker-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1" /><path d="m9 20 3-6 3 6" /><path d="m6 8 6 2 6-2" /><path d="M12 10v4" /></svg></span>
+            <span class="result-copy"><span class="result-name">Running</span></span>
+            <span class="result-unit">km</span>
+            <span class="result-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 12 4 4 8-9" /></svg></span>
+          </span>
+        </label>
+        <label class="type-result" data-type-option data-label="Water" data-unit="ml">
+          <input type="radio" name="picker-type" value="water" />
+          <span class="type-result-surface">
+            <span class="result-icon" data-picker-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z" /><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97" /></svg></span>
+            <span class="result-copy"><span class="result-name">Water</span></span>
+            <span class="result-unit">ml</span>
+            <span class="result-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 12 4 4 8-9" /></svg></span>
+          </span>
+        </label>
+        <label class="type-result" data-type-option data-label="Reading" data-unit="pages">
+          <input type="radio" name="picker-type" value="reading" />
+          <span class="type-result-surface">
+            <span class="result-icon" data-picker-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v16" /><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z" /></svg></span>
+            <span class="result-copy"><span class="result-name">Reading</span></span>
+            <span class="result-unit">pages</span>
+            <span class="result-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 12 4 4 8-9" /></svg></span>
+          </span>
+        </label>
+        <label class="type-result" data-type-option data-label="Meditation" data-unit="min">
+          <input type="radio" name="picker-type" value="meditation" />
+          <span class="type-result-surface">
+            <span class="result-icon" data-picker-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="10" x2="14" y1="2" y2="2" /><line x1="12" x2="15" y1="14" y2="11" /><circle cx="12" cy="14" r="8" /></svg></span>
+            <span class="result-copy"><span class="result-name">Meditation</span></span>
+            <span class="result-unit">min</span>
+            <span class="result-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 12 4 4 8-9" /></svg></span>
+          </span>
+        </label>
+        <label class="type-result" data-type-option data-label="Strength training" data-unit="reps">
+          <input type="radio" name="picker-type" value="strength-training" />
+          <span class="type-result-surface">
+            <span class="result-icon" data-picker-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z" /><path d="m2.5 21.5 1.4-1.4" /><path d="m20.1 3.9 1.4-1.4" /><path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z" /><path d="m9.6 14.4 4.8-4.8" /></svg></span>
+            <span class="result-copy"><span class="result-name">Strength training</span></span>
+            <span class="result-unit">reps</span>
+            <span class="result-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 12 4 4 8-9" /></svg></span>
+          </span>
+        </label>
+        <label class="type-result" data-type-option data-label="Walking" data-unit="steps">
+          <input type="radio" name="picker-type" value="walking" />
+          <span class="type-result-surface">
+            <span class="result-icon" data-picker-icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" /><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" /><path d="M16 17h4" /><path d="M4 13h4" /></svg></span>
+            <span class="result-copy"><span class="result-name">Walking</span></span>
+            <span class="result-unit">steps</span>
+            <span class="result-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 12 4 4 8-9" /></svg></span>
+          </span>
+        </label>
+      </div>
+
+      <p class="empty-results" data-empty-results hidden>No action types match your search.</p>
+      <button class="apply-type-button" type="button" data-apply-type>Use selected type</button>
+    </dialog>
+
+    <script>
+      const typeTrigger = document.querySelector("#type-select-trigger");
+      const typeDialog = document.querySelector("#type-picker-dialog");
+      const typeSearch = typeDialog.querySelector("[data-type-search]");
+      const typeOptions = Array.from(
+        typeDialog.querySelectorAll("[data-type-option]"),
+      );
+      const typeValue = document.querySelector("[data-type-value]");
+      const selectedTypeIcon = document.querySelector("[data-selected-type-icon]");
+      const selectedTypeName = document.querySelector("[data-selected-type-name]");
+      const selectedTypeUnit = document.querySelector("[data-selected-type-unit]");
+      const valueUnit = document.querySelector("[data-value-unit]");
+      const resultsMeta = typeDialog.querySelector("[data-results-meta]");
+      const emptyResults = typeDialog.querySelector("[data-empty-results]");
+      const applyTypeButton = typeDialog.querySelector("[data-apply-type]");
+
+      const updateApplyState = () => {
+        const choice = typeDialog.querySelector(
+          'input[name="picker-type"]:checked',
+        );
+        applyTypeButton.disabled =
+          !choice || choice.closest("[data-type-option]").hidden;
+      };
+
+      const filterTypes = () => {
+        const query = typeSearch.value.trim().toLocaleLowerCase();
+        let visibleCount = 0;
+
+        typeOptions.forEach((option) => {
+          const matches = option.dataset.label
+            .toLocaleLowerCase()
+            .includes(query);
+          option.hidden = !matches;
+          visibleCount += Number(matches);
+        });
+
+        resultsMeta.textContent =
+          `${visibleCount} ${visibleCount === 1 ? "type" : "types"}`;
+        emptyResults.hidden = visibleCount !== 0;
+        updateApplyState();
+      };
+
+      typeTrigger.addEventListener("click", () => {
+        const currentChoice = typeDialog.querySelector(
+          `input[value="${typeValue.value}"]`,
+        );
+        if (currentChoice) currentChoice.checked = true;
+
+        typeSearch.value = "";
+        filterTypes();
+        typeTrigger.setAttribute("aria-expanded", "true");
+        typeDialog.showModal();
+        typeSearch.focus();
+      });
+
+      typeSearch.addEventListener("input", filterTypes);
+      typeDialog.addEventListener("change", updateApplyState);
+
+      typeDialog
+        .querySelector("[data-dialog-close]")
+        .addEventListener("click", () => typeDialog.close());
+
+      applyTypeButton.addEventListener("click", () => {
+        const choice = typeDialog.querySelector(
+          'input[name="picker-type"]:checked',
+        );
+        const option = choice.closest("[data-type-option]");
+        const icon = option.querySelector("[data-picker-icon] svg");
+
+        typeValue.value = choice.value;
+        selectedTypeName.textContent = option.dataset.label;
+        selectedTypeUnit.textContent = option.dataset.unit;
+        valueUnit.textContent = option.dataset.unit;
+        selectedTypeIcon.replaceChildren(icon.cloneNode(true));
+        typeDialog.close();
+      });
+
+      typeDialog.addEventListener("close", () => {
+        typeTrigger.setAttribute("aria-expanded", "false");
+        typeTrigger.focus();
+      });
+    </script>
+  </body>
+</html>

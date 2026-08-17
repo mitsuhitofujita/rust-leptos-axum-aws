@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fffafa" />
+    <title>Edit action — actord</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --app-width: 430px;
+        --client-gutter: 26px;
+        --top-row-height: 42px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 10px;
+        --space-md: 16px;
+        --space-lg: 26px;
+        --space-xl: 42px;
+        --font-caption: 10px;
+        --font-small: 12px;
+        --font-body: 16px;
+        --font-title: 26px;
+        --font-display: 42px;
+        --ink: #29151c;
+        --muted: #765f67;
+        --accent: #e73562;
+        --accent-dark: #c91f4d;
+        --accent-soft: #ffe5ec;
+        --rose-50: #fff8fa;
+        --rose-100: #fff0f4;
+        --rose-200: #ffd4df;
+        --line: #f0dfe4;
+        --white: #ffffff;
+        --shadow: 0 18px 55px rgba(118, 39, 63, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: #f4edef;
+        scrollbar-gutter: stable;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--ink);
+        background: #f4edef;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      a {
+        font: inherit;
+      }
+
+      .app-shell {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: var(--app-width);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        overflow: hidden;
+        flex-direction: column;
+        background: var(--rose-50);
+        box-shadow: var(--shadow);
+        isolation: isolate;
+      }
+
+      .app-shell::before,
+      .app-shell::after {
+        position: absolute;
+        z-index: -1;
+        width: 220px;
+        height: 220px;
+        border: 1px solid var(--rose-200);
+        border-radius: 50%;
+        content: "";
+        opacity: 0.6;
+      }
+
+      .app-shell::before {
+        top: 110px;
+        right: -160px;
+      }
+
+      .app-shell::after {
+        bottom: 96px;
+        left: -178px;
+      }
+
+      .site-header {
+        display: flex;
+        min-height: var(--top-row-height);
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        text-decoration: none;
+      }
+
+      .wordmark-mark {
+        position: relative;
+        width: var(--space-lg);
+        height: var(--space-lg);
+        border: 2px solid var(--accent);
+        border-radius: 9px;
+        transform: rotate(-7deg);
+      }
+
+      .wordmark-mark::after {
+        position: absolute;
+        right: 5px;
+        bottom: 5px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+      }
+
+      .profile-button {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        overflow: hidden;
+        border: 3px solid var(--white);
+        border-radius: 50%;
+        background: var(--accent-soft);
+        box-shadow: 0 4px 13px rgba(111, 36, 60, 0.14);
+        cursor: pointer;
+        place-items: center;
+        transition:
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .profile-button:hover {
+        box-shadow: 0 7px 18px rgba(111, 36, 60, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .profile-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .profile-image {
+        width: 100%;
+        height: 100%;
+      }
+
+      main {
+        flex: 1;
+        padding: var(--space-lg) var(--client-gutter) var(--space-md);
+      }
+
+      .page-heading {
+        margin-top: var(--space-lg);
+        animation: enter 500ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin: 0 0 var(--space-md);
+        color: var(--accent-dark);
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 18px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        content: "";
+      }
+
+      h1 {
+        max-width: 350px;
+        margin: 0;
+        font-size: var(--font-display);
+        font-weight: 800;
+        letter-spacing: -0.065em;
+        line-height: 0.98;
+      }
+
+      h1 em {
+        color: var(--accent);
+        font-style: normal;
+      }
+
+      .edit-form {
+        margin-top: var(--space-lg);
+        animation: enter 580ms 70ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .form-card {
+        display: grid;
+        gap: var(--space-lg);
+        padding: var(--space-lg);
+        border: 1px solid var(--line);
+        border-radius: var(--space-lg);
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: 0 10px 28px rgba(93, 40, 57, 0.055);
+      }
+
+      .field {
+        display: grid;
+        gap: var(--space-xs);
+      }
+
+      .field-label {
+        font-size: var(--font-small);
+        font-weight: 800;
+        letter-spacing: -0.01em;
+      }
+
+      .text-input {
+        width: 100%;
+        min-height: 56px;
+        padding: 0 var(--space-md);
+        border: 1px solid #e6d6db;
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: var(--white);
+        box-shadow: inset 0 1px 2px rgba(93, 40, 57, 0.025);
+        font-size: var(--font-body);
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease;
+      }
+
+      .text-input:hover {
+        border-color: #d5aab6;
+      }
+
+      .text-input:focus {
+        border-color: var(--accent);
+        outline: 3px solid rgba(231, 53, 98, 0.18);
+        outline-offset: 2px;
+        box-shadow: 0 5px 14px rgba(93, 40, 57, 0.06);
+      }
+
+      .field-help {
+        margin: var(--space-2xs) 0 0;
+        color: var(--muted);
+        font-size: var(--font-small);
+        line-height: 1.5;
+      }
+
+      .value-input-wrap {
+        position: relative;
+      }
+
+      .value-input {
+        padding-right: 68px;
+      }
+
+      .value-unit {
+        position: absolute;
+        top: 50%;
+        right: var(--space-md);
+        color: var(--muted);
+        font-size: var(--font-small);
+        font-weight: 800;
+        transform: translateY(-50%);
+      }
+
+      .type-readonly {
+        display: flex;
+        min-height: 68px;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--line);
+        border-radius: var(--space-md);
+        background: var(--rose-50);
+      }
+
+      .type-readonly-icon {
+        display: grid;
+        width: var(--space-xl);
+        height: var(--space-xl);
+        flex: 0 0 auto;
+        border-radius: var(--space-md);
+        color: var(--accent-dark);
+        background: var(--accent-soft);
+        place-items: center;
+      }
+
+      .type-readonly-icon svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .type-readonly-copy {
+        display: grid;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .type-readonly-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .type-readonly-unit {
+        flex: 0 0 auto;
+        color: var(--accent-dark);
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .readonly-value {
+        display: flex;
+        min-height: 56px;
+        align-items: center;
+        margin: 0;
+        padding: 0 var(--space-md);
+        border: 1px solid var(--line);
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: var(--rose-50);
+        font-size: var(--font-body);
+        font-weight: 700;
+      }
+
+      .form-actions {
+        display: grid;
+        gap: var(--space-sm);
+        padding-top: var(--space-xl);
+      }
+
+      .primary-button {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-sm);
+        padding: 0 var(--space-md);
+        border: 0;
+        border-radius: var(--space-md);
+        color: var(--white);
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
+        font-size: var(--font-body);
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          background-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .primary-button:hover {
+        background: var(--accent-dark);
+        box-shadow: 0 16px 30px rgba(199, 30, 75, 0.28);
+        transform: translateY(-1px);
+      }
+
+      .primary-button:active {
+        transform: translateY(1px);
+      }
+
+      .primary-button:focus-visible,
+      .cancel-link:focus-visible,
+      .delete-button:focus-visible {
+        outline: 3px solid rgba(231, 53, 98, 0.2);
+        outline-offset: 3px;
+      }
+
+      .primary-button svg,
+      .delete-button svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .cancel-link {
+        display: flex;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--space-sm);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 750;
+        text-decoration: none;
+        transition:
+          color 160ms ease,
+          background-color 160ms ease;
+      }
+
+      .cancel-link:hover {
+        color: var(--accent-dark);
+        background: var(--rose-100);
+      }
+
+      .danger-zone {
+        margin-top: var(--space-xl);
+        padding-top: var(--space-lg);
+        border-top: 1px solid var(--line);
+        animation: enter 620ms 130ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+      }
+
+      .danger-zone h2 {
+        margin: 0;
+        font-size: var(--font-body);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .danger-copy {
+        margin: var(--space-xs) 0 var(--space-md);
+        color: var(--muted);
+        font-size: var(--font-small);
+        line-height: 1.5;
+      }
+
+      .delete-button {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-sm);
+        padding: 0 var(--space-md);
+        border: 1px solid var(--rose-200);
+        border-radius: var(--space-md);
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.7);
+        font-size: var(--font-body);
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+          border-color 180ms ease,
+          background-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .delete-button:hover {
+        border-color: #d5aab6;
+        background: var(--rose-100);
+        box-shadow: 0 8px 20px rgba(93, 40, 57, 0.08);
+        transform: translateY(-1px);
+      }
+
+      .delete-button:active {
+        transform: translateY(1px);
+      }
+
+      .site-footer {
+        margin: var(--space-md) var(--client-gutter) 0;
+        padding: var(--space-md) 0 var(--space-lg);
+        border-top: 1px solid var(--line);
+        color: #a98d96;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-height: 720px) {
+        main {
+          padding-top: var(--space-md);
+        }
+
+        .page-heading,
+        .edit-form {
+          margin-top: var(--space-md);
+        }
+
+        .form-card {
+          gap: var(--space-md);
+          padding: var(--space-md);
+        }
+
+        .form-actions,
+        .danger-zone {
+          padding-top: var(--space-lg);
+        }
+
+        .danger-zone {
+          margin-top: var(--space-lg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main>
+        <header class="site-header">
+          <a class="wordmark" href="#" aria-label="actord home">
+            <span class="wordmark-mark" aria-hidden="true"></span>
+            <span>actord</span>
+          </a>
+
+          <button class="profile-button" type="button" aria-label="Open Alex's profile">
+            <svg class="profile-image" viewBox="0 0 48 48" role="img" aria-label="Alex's profile image">
+              <rect width="48" height="48" fill="#ffdce5" />
+              <circle cx="24" cy="18" r="9" fill="#c94a69" />
+              <path d="M8 48c1.4-10.1 7.1-15.2 16-15.2S38.6 37.9 40 48" fill="#7d2c45" />
+              <path d="M16 16.8c.7-6.5 4.1-9.7 9.8-9.7 5.4 0 8.4 3.7 8.2 9.4-2.9-1.1-5.6-3.2-7.4-5.3-2.5 3.3-6 5.2-10.6 5.6Z" fill="#512432" />
+            </svg>
+          </button>
+        </header>
+
+        <section class="page-heading" aria-labelledby="page-title">
+          <p class="eyebrow">Actions</p>
+          <h1 id="page-title">Edit<br /><em>action.</em></h1>
+        </section>
+
+        <form class="edit-form" action="#" method="post">
+          <div class="form-card">
+            <div class="field">
+              <span class="field-label" id="type-readonly-label">Action type</span>
+              <div class="type-readonly" role="group" aria-labelledby="type-readonly-label">
+                <span class="type-readonly-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1" /><path d="m9 20 3-6 3 6" /><path d="m6 8 6 2 6-2" /><path d="M12 10v4" /></svg>
+                </span>
+                <span class="type-readonly-copy"><span class="type-readonly-name">Running</span></span>
+                <span class="type-readonly-unit">km</span>
+              </div>
+              <p class="field-help" id="type-readonly-help">
+                The type is fixed once a record is created (DR-0016).
+              </p>
+            </div>
+
+            <div class="field">
+              <span class="field-label" id="recorded-at-label">Recorded</span>
+              <p class="readonly-value" aria-labelledby="recorded-at-label">2026-08-08 07:12</p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="value">Value</label>
+              <div class="value-input-wrap">
+                <input
+                  class="text-input value-input"
+                  id="value"
+                  name="value"
+                  type="number"
+                  inputmode="decimal"
+                  step="any"
+                  value="5.2"
+                  autocomplete="off"
+                  aria-describedby="value-help"
+                  required
+                />
+                <span class="value-unit" aria-hidden="true">km</span>
+              </div>
+              <p class="field-help" id="value-help">
+                Correct the recorded number if it was entered wrong.
+              </p>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m5 12 4 4L19 6" />
+              </svg>
+              <span>Save changes</span>
+            </button>
+            <a class="cancel-link" href="actions-list.html">Cancel</a>
+          </div>
+        </form>
+
+        <section class="danger-zone" aria-labelledby="delete-title">
+          <h2 id="delete-title">Delete this action</h2>
+          <p class="danger-copy">
+            Remove this record if it should not have been recorded.
+          </p>
+          <button class="delete-button" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+            </svg>
+            <span>Delete action</span>
+          </button>
+        </section>
+      </main>
+
+      <footer class="site-footer">actord</footer>
+    </div>
+  </body>
+</html>
