@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 ## Purpose
 
@@ -20,9 +20,12 @@ The application lives in `crates/app` and is compiled to
 | `crates/app/src/home.rs` | `/` — the signed-out and signed-in compositions of one screen |
 | `crates/app/src/dashboard.rs` | `/dashboard` — the ten-day summary and the recent records |
 | `crates/app/src/action_types.rs` | `/action-types`, `/action-types/new` and `/action-types/:id` — the index, registering one, and editing or deleting one |
+| `crates/app/src/actions.rs` | `/actions`, `/actions/new` and `/actions/:id` — the history, recording one, and editing or deleting one |
 | `crates/app/src/icon_picker.rs` | The icon field: the compact selector and the modal it opens |
+| `crates/app/src/type_picker.rs` | The action-type field on the create-action form: the compact selector and the modal it opens — the same shape as `icon_picker.rs`, choosing a registered type instead of an icon |
 | `crates/app/src/icon_catalog.rs` | The supported icons. Generated — see below |
 | `crates/app/src/icons.rs` | The inline SVGs that are not action-type icons, and the wrapper that draws one |
+| `crates/app/src/format.rs` | Display formatting for an action record's value and timestamp, shared by the dashboard and the actions screens |
 | `crates/app/src/api.rs` | Calls to the API, returning `shared` types |
 | `crates/app/src/auth.rs` | Sign-in against the Cognito hosted UI, and the token it yields |
 
@@ -42,14 +45,17 @@ the deployable artefact and is not committed.
 
 **Routing.** `leptos_router`'s `<Router>` wraps a `<Routes>` block declaring
 `/` (`HomePage`), `/dashboard` (`DashboardPage`), `/action-types/new`
-(`NewActionTypePage`), `/action-types` (`ActionTypesPage`) and
-`/action-types/:id` (`EditActionTypePage`), with a `NotFound` fallback.
-Navigation uses `<A>`, which renders `aria-current="page"` on the active
-link — the CSS styles that attribute rather than tracking the active route by
-hand.
+(`NewActionTypePage`), `/action-types` (`ActionTypesPage`),
+`/action-types/:id` (`EditActionTypePage`), `/actions/new` (`NewActionPage`),
+`/actions` (`ActionsPage`) and `/actions/:id` (`EditActionPage`), with a
+`NotFound` fallback. Navigation uses `<A>`, which renders `aria-current="page"`
+on the active link — the CSS styles that attribute rather than tracking the
+active route by hand.
 
-One path reachable by design still lands on the fallback, because its screen
-does not exist: recording an action, which a dashboard row links to.
+`/actions/new` reads an optional `?action_type=` query parameter through
+`leptos_router::hooks::use_query_map`, preselecting that type when it names
+one the account actually has — the dashboard's repeat link is what sends it,
+and page-layouts.md requires the preselection survive the transition.
 
 **Route guarding.** `/dashboard` is wrapped in `RequireAuth`, and every screen
 added behind a session is wrapped the same way, so the route table is where the
@@ -89,21 +95,23 @@ Writes do not go through a resource. `create_action_type`, `update_action_type`
 and `delete_action_type` are each called from an event handler in
 `spawn_local`, with the screen holding its own `saving`/`deleting` and `error`
 signals, because a submission is something the visitor did once rather than
-something the screen is a view of.
+something the screen is a view of. `actions.rs`'s `create_action_record`,
+`update_action_record` and `delete_action_record` follow the same shape;
+`update_action_record` sends only a value, since DR-0016 fixes everything
+else about a record once it is created.
 
 **Deletion** is confirmed by a second native `<dialog>`, shown with
 `showModal` the same way `IconField`'s picker is (DR-0013) — focus
 containment and Escape-to-close come from the browser rather than being
-written by hand. `Keep action type` is first in document order and holds
-initial focus, so an accidental Escape or Enter does not land on the
-destructive action.
+written by hand. `Keep action type` (`Keep action`, on the actions screens)
+is first in document order and holds initial focus, so an accidental Escape
+or Enter does not land on the destructive action.
 
 **The account menu** is `app.rs`'s `AccountControl`, the control every
 authenticated screen carries at the top row's end (DR-0029). It is a third
 native `<dialog>`, opened the same way as the two above: `showModal`, an
 `on:close` handler returning focus to the trigger, nothing hand-rolled for
-focus containment or Escape. It holds `Action` (`/actions`, no route yet —
-reachable by design, landing on the `NotFound` fallback), `Action Type`, a
+focus containment or Escape. It holds `Action` (`/actions`), `Action Type`, a
 separator, and `Log out`, which calls the same `auth::sign_out()` the
 signed-in home uses.
 
@@ -125,6 +133,16 @@ keeps focus inside and closes on Escape, the search field does its own editing,
 and the radio group does its own arrow keys. What is written is the filtering,
 the live count, and the rule that a staged choice reaches the form only when
 `Use selected icon` is activated (DR-0013).
+
+**The type picker** is `type_picker::TypeField`, the same shape as `IconField`
+generalized from choosing an icon to choosing one of the account's own
+registered action types on the create-action form. It differs in one respect:
+`IconField` reads a 725-row compile-time catalog and defers building its rows
+until the dialog first opens, because that catalog is large enough to make the
+deferral worth writing; `TypeField` reads a list the page above it already
+loaded and small enough to render eagerly, so it has no such deferral. The
+edit-action screen does not use it — a record's type is read-only there
+(DR-0016) — and shows the same icon, name and unit as plain text instead.
 
 The 725 rows are built the first time the dialog opens rather than at first
 paint, so a visitor who keeps the icon they were given never pays for them.
@@ -179,8 +197,9 @@ anyway. That is what keeps development needing no configuration at all.
 
 ## Interfaces
 
-**Consumes** `GET /api/dashboard`, `GET`/`POST /api/action-types` and
-`GET`/`PUT`/`DELETE /api/action-types/{id}` — see [Backend](backend.md) — as
+**Consumes** `GET /api/dashboard`, `GET`/`POST /api/action-types`,
+`GET`/`PUT`/`DELETE /api/action-types/{id}`, `GET`/`POST /api/actions` and
+`GET`/`PUT`/`DELETE /api/actions/{id}` — see [Backend](backend.md) — as
 absolute paths joined to `API_BASE_URL`, carrying a bearer token when there is
 one. No API hostname appears in the source; the origin arrives at build time,
 or not at all in development.

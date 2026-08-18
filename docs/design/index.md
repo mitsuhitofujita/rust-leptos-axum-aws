@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -72,3 +72,4 @@ Not yet written, because it does not exist yet:
 | [DR-0029](../decisions/DR-0029-the-authenticated-avatar-opens-an-account-menu.md) | The authenticated avatar opens an account menu, not a direct link |
 | [DR-0030](../decisions/DR-0030-dynamodb-store-tests-run-opt-in-and-self-contained.md) | DynamoDB-backed `Store` tests run opt-in, and the recipe that runs them is self-contained |
 | [DR-0031](../decisions/DR-0031-router-level-tests-live-inside-main-rs.md) | Router-level tests for `server` live inside `main.rs`, not a split `lib.rs` |
+| [DR-0032](../decisions/DR-0032-an-action-record-is-located-by-owner-partition-query-not-a-secondary-index.md) | An action record is located by owner-partition query, not a secondary index |

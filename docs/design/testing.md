@@ -1,6 +1,6 @@
 # Testing
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 ## Purpose
 
@@ -32,7 +32,7 @@ no dev-dependency beyond what a handful of async tests need from `tokio` and
 | Crate | Tests | What they check |
 | --- | --- | --- |
 | `shared` | 0 | — |
-| `server` | 45 run by default, 4 `#[ignore]`d | validation rules (`action_types.rs`); routing, extraction and (de)serialisation through the real `Router` (`main.rs`); the in-memory `Store` and, opt-in, the DynamoDB one (`store.rs`); Cognito token verification end to end — signature, issuer, audience, expiry, `kid` lookup (`cognito.rs`, `jwks.rs`, `identity.rs`) |
+| `server` | 59 run by default, 8 `#[ignore]`d | validation rules (`action_types.rs`, `actions.rs`); routing, extraction and (de)serialisation through the real `Router` (`main.rs`); the in-memory `Store` and, opt-in, the DynamoDB one, including locating an action record by id (`store.rs`); Cognito token verification end to end — signature, issuer, audience, expiry, `kid` lookup (`cognito.rs`, `jwks.rs`, `identity.rs`) |
 | `app` | 0 | — |
 
 `server`'s auth tests are the pattern worth keeping: `testkey.rs` is a
@@ -47,19 +47,27 @@ set. New tests in `server` should keep reaching for a real collaborator
 `Router` with `tower::ServiceExt::oneshot` — in-process, no listener, no
 network — against `Store::Memory` and both `Auth::Mock` and `Auth::Cognito`
 (signed with `testkey.rs`). It covers what nothing else did: a full
-create-then-list round trip through routing, extraction and JSON
+create-then-list round trip for both action types and action records — the
+latter extended to get, update and delete, since those are where an action
+record's id-locating query (DR-0032) is reachable as an actual HTTP request
+rather than a direct `Store` call — through routing, extraction and JSON
 (de)serialisation; a malformed JSON body answering axum's own `400` rather
-than reaching `action_types::validate` at all; an unmapped method answering
-`405`; and both auth arrangements' `401`s reaching the visitor as an actual
-HTTP response, not just as what the extractor function returns in isolation.
-The construction lives inside `main.rs` rather than a split `lib.rs` —
-DR-0031.
+than reaching `action_types::validate` at all; a `type_id` naming no owned
+action type answering `400` through the router rather than in isolation; an
+unmapped method answering `405`; and both auth arrangements' `401`s reaching
+the visitor as an actual HTTP response, not just as what the extractor
+function returns in isolation. The construction lives inside `main.rs` rather
+than a split `lib.rs` — DR-0031.
 
 **Opt-in: the DynamoDB half of `Store`.** `store::dynamo_tests` repeats a
 subset of the `Memory` assertions — query order via `begins_with`, partition
 isolation, the `attribute_exists(pk)` conditional update, idempotent delete —
 against a real `Store::Dynamo`, reusing `Store::from_environment` so the
-selection code path is the one a deployment actually takes (DR-0020). Every
+selection code path is the one a deployment actually takes (DR-0020). For
+action records this is also what exercises `find_action_record`'s
+Query-then-match approach to locating one record by id against the real
+`Query` API rather than a `HashMap` lookup that has no equivalent code path
+at all (DR-0032). Every
 test is `#[ignore]`d, so `cargo test --workspace` never touches Java; `just
 test-dynamo` starts DynamoDB Local itself, waits for it, creates the table,
 runs `cargo test -p server -- --ignored`, and stops DynamoDB Local again on

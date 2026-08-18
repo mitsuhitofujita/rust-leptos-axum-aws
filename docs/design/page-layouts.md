@@ -1,6 +1,6 @@
 # Page Layouts
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 ## Purpose
 
@@ -328,21 +328,184 @@ Escape or the dimmed layer, or focus restoration. The complete visual reference
 is
 [`html/action-types-delete-confirm.html`](html/action-types-delete-confirm.html).
 
-### Remaining application screens
+### Actions
 
-The following screens are part of the intended product even though their exact
-visual composition has not yet been defined by an HTML reference:
+The actions screen is the authenticated history: every action record the
+account has, newest first.
 
-| Screen | Required content and behavior |
-| --- | --- |
-| Actions | List recorded actions. Reached from the account menu; lands on the router's not-found fallback until it exists. |
-| Add action | Select an action type and enter its numeric value; when opened from a dashboard row, preserve the preselected type. |
+```text
+actord                          avatar
 
-These screens inherit the shared shell, heading, footer, visual tokens, focus
-treatment, and reduced-motion behavior. Their route paths, empty states,
-validation messages, destructive-action confirmation, and detailed control
-placement remain unspecified; implementation must not treat the reference home
-or dashboard layouts as resolving those product decisions.
+YOUR HISTORY
+Actions
+Every action you've recorded, newest first.
+
+┌            Add action            ┐
+└──────────────────────────────────┘
+
+Your actions                     N records
+Tap a record to edit its value or delete it.
+┌ icon  name / time      value unit › ┐
+├ icon  name / time      value unit › ┤
+└ ... every recorded action ...       ┘
+```
+
+The full-width solid accent control opens action creation. Each row shows the
+record's action type icon, name, recorded timestamp, numeric value and unit,
+and the whole row opens that record for editing — unlike a dashboard row,
+which opens creation with the type preselected instead. The icon is
+supplemental to the visible name and hidden from assistive technology; the
+chevron is decorative, matching the action-types index's treatment of its own
+rows. Long action names truncate before displacing the value and unit, which
+remain visible on one line.
+
+The list carries no page or count limit, unlike the dashboard's ten-record
+cap: every recorded action appears. The screen has an empty state, because
+every account begins in one before its first record — the same dashed-outline
+treatment the action-types index uses, so the screen does not change
+composition when the first record lands on it.
+
+The reference defines the populated state only. Loading, error, and
+pagination behavior remain unspecified. The complete visual reference is
+[`html/actions-list.html`](html/actions-list.html).
+
+### Add action
+
+The add action screen is an authenticated, single-purpose form recording one
+action against a registered type.
+
+```text
+actord                          avatar
+
+ACTIONS
+Record a
+new action.
+
+┌ Action type ──────────────────────┐
+│ icon  Running               km  › │
+│ supporting guidance                │
+│                                     │
+│ Value                              │
+│ e.g. 5.2                     km    │
+│ supporting guidance                │
+└─────────────────────────────────────┘
+
+┌         Record action            ┐
+└──────────────────────────────────┘
+                Cancel
+```
+
+Both fields live together on an ordinary content surface. The action type
+field is a compact selector showing the current choice's icon, name and
+unit; activating it opens a searchable modal picker choosing among the
+account's own registered types — the same compact-selector-plus-modal-picker
+shape the action-type icon field uses (DR-0013), generalized from choosing an
+icon to choosing a type. The value field accepts a number and displays the
+selected type's unit as a fixed suffix, which updates when the type changes.
+
+When opened from a dashboard row, the type is preselected rather than
+defaulting to the account's first registered type — the transition page
+layouts already requires for repeating an action. The solid accent button is
+the single primary action; `Cancel` returns to the actions screen without
+saving. A successful creation returns there too, so the new record is seen in
+the history it joined rather than announced on the form that made it. A
+refused one keeps the visitor on the form and states the reason above the
+primary action, in the words the service used.
+
+An account with no registered action type cannot record anything: the screen
+replaces the form with a short message pointing to action-type creation
+instead, since a value has nothing to be recorded against otherwise.
+
+The complete visual reference is
+[`html/actions-create.html`](html/actions-create.html).
+
+### Edit action
+
+The edit action screen shows the record's type and recorded time as
+read-only, with only the numeric value open to correction.
+
+```text
+actord                          avatar
+
+ACTIONS
+Edit
+action.
+
+┌ Action type ───────────────────────┐
+│ icon  Running                 km   │
+│ supporting guidance                 │
+│                                      │
+│ Recorded                            │
+│ 2026-08-08 07:12                    │
+│                                      │
+│ Value                               │
+│ 5.2                             km  │
+│ supporting guidance                  │
+└──────────────────────────────────────┘
+
+┌            Save changes           ┐
+└────────────────────────────────────┘
+                Cancel
+
+────────────────────────────────────
+Delete this action
+Supporting consequence copy
+┌            Delete action          ┐
+└────────────────────────────────────┘
+```
+
+The type is fixed once a record is created (DR-0016), and nothing in this
+design lets the recorded time change either, so both are shown rather than
+offered as fields. `Save changes` is the solid accent primary action and
+`Cancel` returns without applying changes. Deletion is separated from the
+routine form by a section gap and divider, explained in text, and rendered as
+an outlined full-width button — the same treatment the action-type edit
+screen gives its own deletion trigger. Activating it opens the confirmation
+state described below.
+
+The edit reference defines placement of the delete trigger. Success and error
+feedback and post-save or post-delete navigation beyond returning to the
+actions screen remain unspecified. The complete visual reference is
+[`html/actions-edit.html`](html/actions-edit.html).
+
+### Delete action confirmation
+
+Deletion confirmation is a modal state over the edit action page, matching
+the action-type deletion confirmation's shape with a record's fuller summary
+in place of a type's name and unit.
+
+```text
+╔ dimmed, blurred edit page ═══════╗
+║                                  ║
+║  ┌────────────────────────────┐  ║
+║  │ trash  CONFIRM DELETION    │  ║
+║  │                            │  ║
+║  │ Delete this record?       │  ║
+║  │ consequence and warning    │  ║
+║  │                            │  ║
+║  │ icon  Running       5.2 km │  ║
+║  │       2026-08-08 07:12    │  ║
+║  │                            │  ║
+║  │       Keep action          │  ║
+║  │      Delete action         │  ║
+║  └────────────────────────────┘  ║
+║                                  ║
+╚══════════════════════════════════╝
+```
+
+The underlying edit page is inert while the dialog is open. The white dialog
+identifies the selected record by its action type's icon and name, its
+recorded time, and its numeric value and unit, explains that deletion cannot
+be undone, and states nothing else reads or restores it. `Keep action` is
+first in document order and receives initial focus. The confirmed deletion
+action uses solid ink rather than the product accent, matching the
+action-type version's reasoning: text and a trash glyph convey its
+destructive meaning without relying on color alone.
+
+The reference defines the confirmation choice but not success and error
+feedback, post-delete navigation, dismissal through Escape or the dimmed
+layer, or focus restoration. The complete visual reference is
+[`html/actions-delete-confirm.html`](html/actions-delete-confirm.html).
 
 ## Interfaces
 
@@ -351,8 +514,8 @@ The page layouts consume three categories of data:
 | Data | Used by |
 | --- | --- |
 | Authentication state, display name, email, profile image | Both home states and the authenticated top row |
-| Action type: icon identifier, name and numeric unit | Action-type management, action creation, dashboard rows |
-| Action record: action type, numeric value, recorded timestamp | Dashboard summary, dashboard recent list, actions list |
+| Action type: icon identifier, name and numeric unit | Action-type management, action creation, action editing (read-only), dashboard rows |
+| Action record: action type, numeric value, recorded timestamp | Dashboard summary, dashboard recent list, actions list, action editing and its deletion confirmation |
 
 Navigation that is part of the current design is:
 
@@ -362,7 +525,7 @@ signed-in home ── Open dashboard ──▶ dashboard
 dashboard recent row ──────────────▶ add action (type preselected)
 authenticated avatar ───────────────▶ account menu
 account menu ── Action Type ────────▶ action-type access
-account menu ── Action ─────────────▶ actions (not built; not-found fallback)
+account menu ── Action ─────────────▶ actions
 account menu ── Log out ────────────▶ signed-out home
 action types ───────── Add action type ──▶ add action type
 add action type ───── Cancel or created ─▶ action types
@@ -370,8 +533,16 @@ action-type row ─────────────────────�
 add or edit action type ── icon field ──▶ icon picker
 icon picker ────── Use selected icon ───▶ the form, icon applied
 icon picker ────── close or Escape ─────▶ the form, icon unchanged
-edit action type ───── Delete action type ──▶ deletion confirmation
-deletion confirmation ── Keep action type ──▶ edit action type
+edit action type ───── Delete action type ──▶ deletion confirmation (type)
+deletion confirmation (type) ── Keep action type ──▶ edit action type
+actions ─────────────────── Add action ──▶ add action
+add action ──────────── Cancel or created ─▶ actions
+action record row ───────────────────────▶ edit action
+add action ── action type field ────────▶ type picker
+type picker ────── Use selected type ───▶ the form, type applied
+type picker ────── close or Escape ─────▶ the form, type unchanged
+edit action ─────────────── Delete action ──▶ deletion confirmation (action)
+deletion confirmation (action) ── Keep action ──▶ edit action
 any application screen, unauthenticated ─▶ signed-out home
 ```
 
@@ -393,9 +564,13 @@ that future routes and components must realize.
 - The icon is chosen through the modal picker rather than an inline grid, so the
   form's height does not grow with the catalog — DR-0013.
 - Recording an action always requires an action type and a numeric value.
-- Dashboard recent actions are capped at ten and ordered newest first.
+- Dashboard recent actions are capped at ten and ordered newest first. The
+  actions screen carries no such cap: every recorded action appears, also
+  newest first, since it is the account's history rather than a summary.
 - A dashboard recent-action row repeats its type by opening action creation with
   that type selected; it does not silently create a record.
+- Once created, an action record's type and recorded time are fixed. Editing
+  changes only the numeric value — DR-0016.
 - Authentication state changes the home layout rather than producing unrelated
   visual systems.
 - All screen copy and user-entered action names and units are expected in

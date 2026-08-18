@@ -1,13 +1,13 @@
 # Persistence
 
-Updated: 2026-08-11
+Updated: 2026-08-17
 
-Note: action types are stored. `crates/server` reads and writes the `TYPE#`
-half of this schema, and derives the partition key from the Cognito `sub` in the
-`AuthContext` the edge produced (DR-0024). Action records are not — `GET /api/dashboard`
-still answers from hardcoded values, so nothing has yet written a `RECORD#`
-item. Everything below about records describes the store the service is being
-written against; everything about action types describes what it does.
+Note: both entities are stored. `crates/server` reads and writes both the
+`TYPE#` and `RECORD#` halves of this schema, deriving the partition key from
+the Cognito `sub` in the `AuthContext` the edge produced (DR-0024). One gap
+remains: `GET /api/dashboard` still answers from hardcoded values rather than
+querying the `RECORD#` items `/api/actions` now writes — see
+[Backend](backend.md)'s matching note.
 
 ## Purpose
 
@@ -102,13 +102,24 @@ reader never has to parse the key to display an item.
 | Edit action type | `GetItem` on `pk`, `sk = TYPE#<id>` — implemented |
 | Create a type | `PutItem` on that key — implemented |
 | Edit / delete a type | `UpdateItem`, `DeleteItem` on that key — implemented |
+| Actions list | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending — implemented |
+| Add action | `PutItem`, after a `GetItem` on the named type to copy its display attributes — implemented |
+| Get / edit / delete an action | The same `begins_with(sk, "RECORD#")` query as the list, matched by id in the response rather than by key, since the id alone cannot reconstruct `sk` — `GetItem`/`UpdateItem`/`DeleteItem` follow on the matched key — implemented, DR-0032 |
 | Dashboard, ten recent records | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending, limit 10 |
 | Dashboard, ten-day summary | `pk = USER#<sub>` and `sk BETWEEN "RECORD#<from>" AND "RECORD#<to>"` |
-| Add action | `PutItem` |
 
 Descending order is `ScanIndexForward = false`; DynamoDB applies the limit after
 ordering, so the ten newest cost one read of ten items rather than a scan of the
-partition.
+partition. The dashboard's two queries remain unimplemented — they describe
+what `GET /api/dashboard` will run once it reads the store instead of
+hardcoded values, not what it runs today.
+
+**Getting, editing or deleting one action record costs a query across the
+owner's whole `RECORD#` range, not a point read.** An action type's `sk =
+TYPE#<id>` lets the id alone address one item; an action record's `sk =
+RECORD#<recorded_at>#<id>` does not, since `<recorded_at>` sits between the
+prefix and the id. DR-0032 chose this over adding a secondary index or
+dropping `<recorded_at>` from the key, on the reasoning recorded there.
 
 In the window query, `<from>` is the first instant of the window and `<to>` is
 the first instant *after* it. `BETWEEN` is inclusive at both ends, but every
@@ -193,11 +204,20 @@ with no table rather than a broken one (DR-0018). See
   limits are the service's, in `crates/server/src/action_types.rs`; no document
   fixes them, and nothing in the table enforces them.
 
+- **A record's `value` must be finite, and its `type_id` must name a type in
+  the caller's own partition.** Both are checked in
+  `crates/server/src/actions.rs` before anything is stored; a `type_id` that
+  resolves to nothing is a `400`, not a `404`, because it is a body field
+  naming another entity rather than the URL's own addressed resource.
+
 - **There is no secondary index, so any access pattern not answered by the
   primary key requires one.** Listing every record of a single action type
   across time is the first such query to expect; it is not in the current design.
   Adding an index is an online operation and needs no change to existing items —
-  DR-0015.
+  DR-0015. Getting, editing or deleting one action record by id is a second
+  pattern the primary key does not answer directly, and DR-0032 chose to
+  answer it with an owner-partition query rather than reaching for an index
+  yet — the same option DR-0015 leaves open, deliberately not taken here.
 
 - **The table is guarded twice and backed up.** `prevent_destroy` stops
   Terraform, `deletion_protection_enabled` stops the console and the CLI, and
