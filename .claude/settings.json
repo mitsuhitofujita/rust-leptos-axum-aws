@@ -18,6 +18,5 @@
             "Bash(git push *)"
         ],
         "ask": []
-    },
-    "plansDirectory": "./docs/plans"
+    }
 }

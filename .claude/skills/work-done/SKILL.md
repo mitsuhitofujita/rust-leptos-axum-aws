@@ -1,6 +1,6 @@
 ---
 name: work-done
-description: Derive Decision Records and Design Document updates from a finished Work Log, its plan files, and the uncommitted changes, then retire the working records. Use when a unit of work is implemented and ready to be written up.
+description: Derive Decision Records and Design Document updates from a finished Work Log and the uncommitted changes, then retire the working records. Use when a unit of work is implemented and ready to be written up.
 argument-hint: "work log filename — or leave empty to use the most recent"
 disable-model-invocation: true
 allowed-tools: Bash(date *) Bash(git branch *) Bash(git status *) Bash(git diff *) Bash(ls *) Bash(grep *) Read Write Edit
@@ -13,7 +13,6 @@ allowed-tools: Bash(date *) Bash(git branch *) Bash(git status *) Bash(git diff 
 - Today: !`date +%Y-%m-%d`
 - Branch: !`git branch --show-current 2>/dev/null || echo "(not a git repository)"`
 - Work Logs: !`ls -1 docs/work/ 2>/dev/null || echo "(none)"`
-- Plans: !`ls -1 docs/plans/ 2>/dev/null || echo "(none)"`
 - Design Documents: !`ls -1 docs/design/ 2>/dev/null || echo "(none)"`
 - Decision Records: !`ls -1 docs/decisions/ 2>/dev/null || echo "(none)"`
 - Retrospectives: !`ls -1 docs/retrospectives/ 2>/dev/null || echo "(none)"`
@@ -26,10 +25,9 @@ $ARGUMENTS
 
 ## Sources, and what each one is good for
 
-Identify the Work Log named above, or the most recent one if nothing was named,
-and the plan files in `docs/plans/` belonging to the same work. Read them, then
-read the uncommitted changes with `git diff HEAD` — read it by path rather than
-all at once if the summary above shows it is large.
+Identify the Work Log named above, or the most recent one if nothing was named.
+Read it, then read the uncommitted changes with `git diff HEAD` — read it by
+path rather than all at once if the summary above shows it is large.
 
 Each source answers a different question, and confusing them produces bad
 documents:
@@ -37,17 +35,17 @@ documents:
 The **Work Log** holds what was asked and how the understanding of it evolved.
 The Request section is the only record of the original wording.
 
-The **plans** hold what was intended at the moment they were written. They are
-aspirational. Never copy plan text into a Design Document as though it describes
-reality.
+The Work Log's **Plan section** holds what was intended at the moment it was
+written. It is aspirational. Never copy plan text into a Design Document as
+though it describes reality.
 
 The **diff** is the only source that says what actually exists. When a Design
 Document and the code disagree, the code wins and the document is wrong.
 
 ## Find the decisions
 
-Start from the divergences. Where the code differs from what the plan said, or
-from what the Work Log's earlier entries assumed, something was decided during
+Start from the divergences. Where the code differs from what the Plan section
+said, or from what the Work Log's earlier entries assumed, something was decided during
 implementation — and decisions made mid-flight are exactly the ones nobody
 remembers to write down. List every such divergence before evaluating any of
 them.
@@ -156,19 +154,20 @@ Check each item against the files. Do not assume.
 
 - Does every behavioural change in the diff appear in a Design Document?
 - Is every confirmed decision recorded, with its number?
-- Would anything worth keeping vanish if the Work Log and plans were deleted
-  right now? Re-read the Work Log's Progress section with this question in mind.
-- Does any durable document reference the Work Log or a plan file? Grep
-  `docs/design/` and `docs/decisions/` for their filenames. Any hit must be
-  rewritten to stand on its own.
+- Would anything worth keeping vanish if the Work Log were deleted right now?
+  Re-read the Work Log's Progress section with this question in mind.
+- Does any durable document reference the Work Log? Grep `docs/design/` and
+  `docs/decisions/` for its filename. Any hit must be rewritten to stand on
+  its own.
 
 Report the result item by item. If something fails, fix it and check again.
 
 ## Retire the working records
 
 Only once every item passes, and only with explicit confirmation: mark the Work
-Log `Status: complete`, then delete it and its plan files. They remain in version
-control, so this removes them from the working tree rather than destroying them.
+Log `Status: complete`, then delete it. Confirm the log is committed first — it
+remains in version control, so this removes it from the working tree rather
+than destroying it.
 
-If the user prefers to keep them until the branch merges, that is fine — say so
+If the user prefers to keep it until the branch merges, that is fine — say so
 and stop. The checklist passing is what matters; the deletion is bookkeeping.

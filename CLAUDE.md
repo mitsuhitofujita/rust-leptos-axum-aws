@@ -17,7 +17,3 @@ This project runs inside a dev container.
 The project lives inside the dev container and is under git control, so changes
 can be made without worrying about affecting the host system. Building,
 deleting, and regenerating files may proceed without asking first.
-
-## Documentation
-
-Write plan files in English.
