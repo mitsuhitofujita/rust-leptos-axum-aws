@@ -11,7 +11,7 @@ use crate::actions::{ActionsPage, EditActionPage, NewActionPage};
 use crate::auth::{self, AuthState};
 use crate::dashboard::DashboardPage;
 use crate::home::{HomePage, ProfileImage};
-use crate::icons::{Close, LogOut, Pulse, Tag};
+use crate::icons::{Close, Dashboard, LogOut, Pulse, Tag};
 
 /// The auth state, shared through context so every screen reads the same one. A
 /// signal rather than a resource: `complete_sign_in` runs once at mount, and
@@ -190,11 +190,11 @@ pub fn RequireAuth(children: ChildrenFn) -> impl IntoView {
 /// top row.
 ///
 /// It opens a menu rather than linking straight to one place, because it now
-/// has to reach three destinations — the actions list, the action-type area,
-/// and signing out. The menu is a native `<dialog>`, shown with `showModal`
-/// the same way `IconField`'s picker and the delete-confirmation dialog are:
-/// focus containment and Escape-to-close come from the browser, not from code
-/// written here.
+/// has to reach four destinations — the dashboard, the actions list, the
+/// action-type area, and signing out. The menu is a native `<dialog>`, shown
+/// with `showModal` the same way `IconField`'s picker and the
+/// delete-confirmation dialog are: focus containment and Escape-to-close come
+/// from the browser, not from code written here.
 #[component]
 pub fn AccountControl() -> impl IntoView {
     let auth_state = auth_state();
@@ -267,6 +267,10 @@ pub fn AccountControl() -> impl IntoView {
             </button>
 
             <div class="menu-list">
+                <A href="/dashboard" attr:class="menu-link">
+                    <span class="menu-icon" aria-hidden="true"><Dashboard /></span>
+                    <span>"Dashboard"</span>
+                </A>
                 <A href="/actions" attr:class="menu-link">
                     <span class="menu-icon" aria-hidden="true"><Pulse /></span>
                     <span>"Action"</span>

@@ -524,6 +524,7 @@ signed-out home ── Google sign-in ──▶ signed-in home
 signed-in home ── Open dashboard ──▶ dashboard
 dashboard recent row ──────────────▶ add action (type preselected)
 authenticated avatar ───────────────▶ account menu
+account menu ── Dashboard ───────────▶ dashboard
 account menu ── Action Type ────────▶ action-type access
 account menu ── Action ─────────────▶ actions
 account menu ── Log out ────────────▶ signed-out home
