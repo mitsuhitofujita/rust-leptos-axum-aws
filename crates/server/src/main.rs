@@ -1,8 +1,7 @@
 //! The axum API.
 //!
-//! `/api/action-types` answers from the store; `/api/dashboard` still answers
-//! from fixed values, and says so in [`dashboard`]. The store is the DynamoDB
-//! table `docs/design/persistence.md` describes.
+//! Every route answers from the store, the DynamoDB table
+//! `docs/design/persistence.md` describes.
 //!
 //! Every request under `/api` names [`identity::Owner`] in its handler
 //! signature, which is what decides who the caller is and whether they are
@@ -420,5 +419,55 @@ mod tests {
         let response = app.oneshot(create_record).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// The dashboard counterpart of the actions lifecycle test above: two
+    /// actions are recorded through `/api/actions`, then `GET
+    /// /api/dashboard` is what proves `dashboard::dashboard` actually reads
+    /// them back through the router rather than answering fixed values.
+    #[tokio::test]
+    async fn dashboard_reflects_recorded_actions_through_the_router() {
+        let app = router(memory_state(Auth::Mock));
+
+        let create_type = mock_caller(
+            Request::post("/api/action-types")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"name": "Running", "unit": "km", "icon": "footprints"}).to_string(),
+                ))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(create_type).await.unwrap();
+        let type_id = json_body(response).await["id"].as_str().unwrap().to_owned();
+
+        for value in [5.2, 3.1] {
+            let create_record = mock_caller(
+                Request::post("/api/actions")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"type_id": type_id, "value": value}).to_string(),
+                    ))
+                    .unwrap(),
+                "alice",
+            );
+            let response = app.clone().oneshot(create_record).await.unwrap();
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
+
+        let dashboard = mock_caller(
+            Request::get("/api/dashboard").body(Body::empty()).unwrap(),
+            "alice",
+        );
+        let response = app.oneshot(dashboard).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+
+        assert_eq!(body["summary"]["total"], 2);
+        assert_eq!(body["summary"]["daily"].as_array().unwrap().len(), 10);
+        let recent = body["recent"].as_array().unwrap();
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0]["value"], 3.1);
+        assert_eq!(recent[1]["value"], 5.2);
     }
 }

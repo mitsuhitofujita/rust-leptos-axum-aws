@@ -14,10 +14,12 @@ use std::sync::Mutex;
 
 use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::types::AttributeValue;
-use shared::{ActionRecord, ActionType, NewActionRecord, NewActionType, UpdateActionRecord};
-use time::OffsetDateTime;
+use shared::{
+    ActionRecord, ActionType, NewActionRecord, NewActionType, RecentSummary, UpdateActionRecord,
+};
 use time::format_description::BorrowedFormatItem;
 use time::macros::format_description;
+use time::{Duration, OffsetDateTime};
 use ulid::Ulid;
 
 /// The environment variable `infra/api/lambda.tf` passes the table name in.
@@ -39,6 +41,16 @@ const RECORD_PREFIX: &str = "RECORD#";
 /// newest. Nothing else in the system enforces this format (DR-0015).
 const TIMESTAMP: &[BorrowedFormatItem<'_>] =
     format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
+
+/// The dashboard's recent-actions cap — `page-layouts.md`. Independent of
+/// [`SUMMARY_WINDOW_DAYS`]; the two need not agree on count, and
+/// `persistence.md` says so explicitly.
+const RECENT_RECORDS_LIMIT: i32 = 10;
+
+/// The dashboard's summary window, in days — `page-layouts.md`,
+/// `persistence.md`. [`RecentSummary::daily`] always has exactly this many
+/// entries.
+const SUMMARY_WINDOW_DAYS: i64 = 10;
 
 /// Anything that stopped a read or a write from happening.
 ///
@@ -336,10 +348,34 @@ impl Store {
     /// One owner's action records, newest first — the reverse of
     /// [`Store::list_action_types`], because a history reads newest first
     /// where a set of registered types reads in the order they were added.
+    /// No cap: the actions screen shows the account's full history
+    /// (`page-layouts.md`), unlike [`Store::recent_action_records`].
     pub async fn list_action_records(&self, owner: &str) -> Result<Vec<ActionRecord>, StoreError> {
+        self.query_records(owner, None).await
+    }
+
+    /// The dashboard's recent-actions list: the newest
+    /// [`RECENT_RECORDS_LIMIT`] records — a separate limit from
+    /// [`Store::recent_summary`]'s window, not a smaller version of the same
+    /// one (`persistence.md`).
+    pub async fn recent_action_records(
+        &self,
+        owner: &str,
+    ) -> Result<Vec<ActionRecord>, StoreError> {
+        self.query_records(owner, Some(RECENT_RECORDS_LIMIT)).await
+    }
+
+    /// The `begins_with(sk, "RECORD#")` query both [`Store::list_action_records`]
+    /// and [`Store::recent_action_records`] run, newest first, differing only
+    /// in whether the result is capped.
+    async fn query_records(
+        &self,
+        owner: &str,
+        limit: Option<i32>,
+    ) -> Result<Vec<ActionRecord>, StoreError> {
         match self {
             Self::Dynamo { client, table } => {
-                let response = client
+                let mut request = client
                     .query()
                     .table_name(table)
                     .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
@@ -348,7 +384,12 @@ impl Store {
                         ":prefix",
                         AttributeValue::S(RECORD_PREFIX.to_owned()),
                     )
-                    .scan_index_forward(false)
+                    .scan_index_forward(false);
+                if let Some(limit) = limit {
+                    request = request.limit(limit);
+                }
+
+                let response = request
                     .send()
                     .await
                     .map_err(|err| StoreError(format!("could not read actions: {err}")))?;
@@ -360,13 +401,113 @@ impl Store {
                     .filter_map(action_record)
                     .collect())
             }
-            Self::Memory { records, .. } => Ok(records
+            Self::Memory { records, .. } => {
+                let newest_first: Vec<ActionRecord> = records
+                    .lock()
+                    .map_err(|_| StoreError("the store is poisoned".to_owned()))?
+                    .get(owner)
+                    .map(|owned| owned.iter().rev().cloned().collect())
+                    .unwrap_or_default();
+
+                Ok(match limit {
+                    Some(limit) => newest_first.into_iter().take(limit as usize).collect(),
+                    None => newest_first,
+                })
+            }
+        }
+    }
+
+    /// The dashboard's ten-day summary: one count per UTC calendar day,
+    /// oldest first, covering today and the nine days before it — a separate
+    /// query and a separate limit from [`Store::recent_action_records`]'s
+    /// list (`persistence.md`). `recorded_at` is always UTC and no per-user
+    /// timezone is captured anywhere in this design, so "today" here is the
+    /// UTC date, not the visitor's local one.
+    ///
+    /// DynamoDB does no aggregation, so bucketing the matched records by day
+    /// is this method's own job, done by comparing each one's `recorded_at`
+    /// against the day boundaries as fixed-width strings — the same
+    /// lexical-order property the rest of this file already relies on,
+    /// rather than parsing a timestamp back into a date.
+    pub async fn recent_summary(&self, owner: &str) -> Result<RecentSummary, StoreError> {
+        let today = OffsetDateTime::now_utc().date();
+        let window_start = today - Duration::days(SUMMARY_WINDOW_DAYS - 1);
+
+        // One bound per day in the window, plus the exclusive upper bound:
+        // `SUMMARY_WINDOW_DAYS + 1` fenceposts for `SUMMARY_WINDOW_DAYS`
+        // buckets.
+        let mut bounds = Vec::with_capacity(SUMMARY_WINDOW_DAYS as usize + 1);
+        for offset in 0..=SUMMARY_WINDOW_DAYS {
+            bounds.push(format_instant(
+                (window_start + Duration::days(offset))
+                    .midnight()
+                    .assume_utc(),
+            )?);
+        }
+        let from = &bounds[0];
+        let to = &bounds[SUMMARY_WINDOW_DAYS as usize];
+
+        let items: Vec<ActionRecord> = match self {
+            Self::Dynamo { client, table } => {
+                let response = client
+                    .query()
+                    .table_name(table)
+                    .key_condition_expression("pk = :pk AND sk BETWEEN :from AND :to")
+                    .expression_attribute_values(":pk", AttributeValue::S(partition(owner)))
+                    .expression_attribute_values(
+                        ":from",
+                        AttributeValue::S(format!("{RECORD_PREFIX}{from}")),
+                    )
+                    // `BETWEEN` is inclusive at both ends, but every stored
+                    // key has a `#<ulid>` suffix and so sorts strictly after
+                    // the bare `RECORD#<to>` bound — the window's upper end
+                    // is exclusive with no off-by-one-millisecond adjustment
+                    // (`persistence.md`).
+                    .expression_attribute_values(
+                        ":to",
+                        AttributeValue::S(format!("{RECORD_PREFIX}{to}")),
+                    )
+                    .send()
+                    .await
+                    .map_err(|err| {
+                        StoreError(format!("could not read the summary window: {err}"))
+                    })?;
+
+                response
+                    .items
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(action_record)
+                    .collect()
+            }
+            Self::Memory { records, .. } => records
                 .lock()
                 .map_err(|_| StoreError("the store is poisoned".to_owned()))?
                 .get(owner)
-                .map(|owned| owned.iter().rev().cloned().collect())
-                .unwrap_or_default()),
+                .map(|owned| {
+                    owned
+                        .iter()
+                        .filter(|record| &record.recorded_at >= from && &record.recorded_at < to)
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default(),
+        };
+
+        let mut daily = vec![0u32; SUMMARY_WINDOW_DAYS as usize];
+        for record in &items {
+            if let Some(day) = bounds
+                .windows(2)
+                .position(|pair| record.recorded_at >= pair[0] && record.recorded_at < pair[1])
+            {
+                daily[day] += 1;
+            }
         }
+
+        Ok(RecentSummary {
+            total: daily.iter().sum(),
+            daily,
+        })
     }
 
     /// Records one action against a registered type, copying that type's
@@ -632,10 +773,17 @@ fn string<'item>(item: &'item HashMap<String, AttributeValue>, key: &str) -> Opt
     item.get(key)?.as_s().ok().map(String::as_str)
 }
 
-fn now() -> Result<String, StoreError> {
-    OffsetDateTime::now_utc()
+/// Formats one instant as this store's fixed-width `TIMESTAMP` — shared by
+/// [`now`] and [`Store::recent_summary`]'s day boundaries, so both go through
+/// the one format the sort key's lexical order depends on.
+fn format_instant(instant: OffsetDateTime) -> Result<String, StoreError> {
+    instant
         .format(TIMESTAMP)
-        .map_err(|err| StoreError(format!("could not format the current time: {err}")))
+        .map_err(|err| StoreError(format!("could not format a timestamp: {err}")))
+}
+
+fn now() -> Result<String, StoreError> {
+    format_instant(OffsetDateTime::now_utc())
 }
 
 #[cfg(test)]
@@ -1077,6 +1225,100 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn recent_action_records_caps_at_ten_newest_first() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+
+        for value in 0..12 {
+            store
+                .create_action_record(
+                    "someone",
+                    NewActionRecord {
+                        type_id: action_type.id.clone(),
+                        value: f64::from(value),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let recent = store.recent_action_records("someone").await.unwrap();
+        let values: Vec<f64> = recent.iter().map(|record| record.value).collect();
+        assert_eq!(values, [11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0]);
+    }
+
+    #[tokio::test]
+    async fn recent_summary_of_an_empty_partition_is_ten_zero_buckets() {
+        let store = Store::memory();
+
+        let summary = store.recent_summary("someone").await.unwrap();
+
+        assert_eq!(summary.total, 0);
+        assert_eq!(summary.daily, vec![0; 10]);
+    }
+
+    /// Records created "now" always land in today's bucket — the last one,
+    /// since `daily` is oldest first. This is what a test can assert without
+    /// controlling the clock `recent_summary` reads.
+    #[tokio::test]
+    async fn recent_summary_counts_todays_records_into_the_last_bucket() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+
+        for _ in 0..3 {
+            store
+                .create_action_record(
+                    "someone",
+                    NewActionRecord {
+                        type_id: action_type.id.clone(),
+                        value: 1.0,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let summary = store.recent_summary("someone").await.unwrap();
+
+        assert_eq!(summary.total, 3);
+        assert_eq!(summary.daily.len(), 10);
+        assert_eq!(summary.daily[9], 3);
+        assert_eq!(summary.daily[..9], [0; 9]);
+    }
+
+    /// A stranger's records neither inflate the total nor leak into any
+    /// bucket — the same partition isolation every other query in this file
+    /// already holds to.
+    #[tokio::test]
+    async fn recent_summary_does_not_count_another_owners_records() {
+        let store = Store::memory();
+        let stranger_type = store
+            .create_action_type("someone-else", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+        store
+            .create_action_record(
+                "someone-else",
+                NewActionRecord {
+                    type_id: stranger_type.id,
+                    value: 1.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        let summary = store.recent_summary("someone").await.unwrap();
+
+        assert_eq!(summary.total, 0);
+    }
 }
 
 /// The `Dynamo` variant, run against DynamoDB Local instead of `Memory` —
@@ -1328,5 +1570,84 @@ mod dynamo_tests {
             .delete_action_record(&owner, "not-a-real-id")
             .await
             .unwrap();
+    }
+
+    /// What actually exercises `.limit()` on a real `Query` — `Memory`'s
+    /// `.take()` has no equivalent code path, the same reasoning
+    /// `lists_records_newest_first` gives for `scan_index_forward(false)`.
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn recent_action_records_caps_at_ten_through_dynamo() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("recent-cap");
+        let action_type = store
+            .create_action_type(
+                &owner,
+                NewActionType {
+                    name: "Running".to_owned(),
+                    unit: "km".to_owned(),
+                    icon: "footprints".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+
+        for value in 0..12 {
+            store
+                .create_action_record(
+                    &owner,
+                    NewActionRecord {
+                        type_id: action_type.id.clone(),
+                        value: f64::from(value),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let recent = store.recent_action_records(&owner).await.unwrap();
+
+        assert_eq!(recent.len(), 10);
+        assert_eq!(recent[0].value, 11.0);
+    }
+
+    /// What actually exercises the `sk BETWEEN :from AND :to` key condition
+    /// against a real `Query` — `Memory`'s filter has no equivalent code
+    /// path.
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn recent_summary_counts_todays_records_through_dynamo() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("summary-window");
+        let action_type = store
+            .create_action_type(
+                &owner,
+                NewActionType {
+                    name: "Running".to_owned(),
+                    unit: "km".to_owned(),
+                    icon: "footprints".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+
+        for _ in 0..2 {
+            store
+                .create_action_record(
+                    &owner,
+                    NewActionRecord {
+                        type_id: action_type.id.clone(),
+                        value: 1.0,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let summary = store.recent_summary(&owner).await.unwrap();
+
+        assert_eq!(summary.total, 2);
+        assert_eq!(summary.daily.len(), 10);
+        assert_eq!(summary.daily[9], 2);
     }
 }
