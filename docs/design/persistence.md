@@ -1,13 +1,6 @@
 # Persistence
 
-Updated: 2026-08-17
-
-Note: both entities are stored. `crates/server` reads and writes both the
-`TYPE#` and `RECORD#` halves of this schema, deriving the partition key from
-the Cognito `sub` in the `AuthContext` the edge produced (DR-0024). One gap
-remains: `GET /api/dashboard` still answers from hardcoded values rather than
-querying the `RECORD#` items `/api/actions` now writes — see
-[Backend](backend.md)'s matching note.
+Updated: 2026-08-18
 
 ## Purpose
 
@@ -105,14 +98,15 @@ reader never has to parse the key to display an item.
 | Actions list | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending — implemented |
 | Add action | `PutItem`, after a `GetItem` on the named type to copy its display attributes — implemented |
 | Get / edit / delete an action | The same `begins_with(sk, "RECORD#")` query as the list, matched by id in the response rather than by key, since the id alone cannot reconstruct `sk` — `GetItem`/`UpdateItem`/`DeleteItem` follow on the matched key — implemented, DR-0032 |
-| Dashboard, ten recent records | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending, limit 10 |
-| Dashboard, ten-day summary | `pk = USER#<sub>` and `sk BETWEEN "RECORD#<from>" AND "RECORD#<to>"` |
+| Dashboard, ten recent records | `pk = USER#<sub>` and `begins_with(sk, "RECORD#")`, descending, limit 10 — implemented |
+| Dashboard, ten-day summary | `pk = USER#<sub>` and `sk BETWEEN "RECORD#<from>" AND "RECORD#<to>"` — implemented |
 
 Descending order is `ScanIndexForward = false`; DynamoDB applies the limit after
 ordering, so the ten newest cost one read of ten items rather than a scan of the
-partition. The dashboard's two queries remain unimplemented — they describe
-what `GET /api/dashboard` will run once it reads the store instead of
-hardcoded values, not what it runs today.
+partition. The ten-day summary buckets its matched items by UTC calendar day —
+DR-0033 — comparing each one's fixed-width `recorded_at` against the day
+boundaries as strings rather than parsing it back into a date, the same
+lexical-order property the rest of this schema already relies on.
 
 **Getting, editing or deleting one action record costs a query across the
 owner's whole `RECORD#` range, not a point read.** An action type's `sk =

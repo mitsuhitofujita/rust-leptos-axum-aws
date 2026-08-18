@@ -1,6 +1,6 @@
 # Backend
 
-Updated: 2026-08-17
+Updated: 2026-08-18
 
 ## Purpose
 
@@ -22,7 +22,7 @@ Web Adapter turns an invocation into an HTTP request on `127.0.0.1:3000`, and
 | `src/store.rs` | Reading and writing the table, including, `#[cfg(test)]`, opt-in tests against a real DynamoDB Local (testing.md, DR-0030) |
 | `src/action_types.rs` | `/api/action-types`, and what may be stored |
 | `src/actions.rs` | `/api/actions`, and what may be stored — mirrors `action_types.rs`, except an update takes only a value (DR-0016) |
-| `src/dashboard.rs` | `/api/dashboard`, still answering from fixed values |
+| `src/dashboard.rs` | `/api/dashboard`, querying the store for the recent list and the ten-day summary |
 | `src/testkey.rs` | A committed RSA fixture the identity/cognito/jwks tests, and `main.rs`'s router-level tests, sign with — `#[cfg(test)]` only |
 
 `AppState { store: Arc<Store>, auth: Arc<identity::Auth> }` is the router's
@@ -35,8 +35,7 @@ user isolation. A handler asks for the owner and cannot ask for anything else:
 no path, query or body parameter names one, which is what stops a handler from
 serving a partition its caller does not own — and, since DR-0028, no route
 grants this for free: a handler that does not name `Owner` is reachable by
-anyone with no token, so every handler under `/api` names it, `dashboard()`
-included even though it does nothing with the value yet.
+anyone with no token, so every handler under `/api` names it.
 
 **Two arrangements, chosen once at startup by `identity::Auth::from_environment`**,
 the same shape `store::Store` already uses for which store to run:
@@ -160,7 +159,7 @@ see DR-0032.
 | Route | Answers |
 | --- | --- |
 | `GET /health` | `ok`. Deliberately unauthenticated, because a probe carries no token |
-| `GET /api/dashboard` | `shared::Dashboard`, from hardcoded values |
+| `GET /api/dashboard` | `shared::Dashboard` — the recent ten records and the ten-day summary, both from the store |
 | `GET /api/action-types` | `shared::ActionType[]`, oldest first |
 | `POST /api/action-types` | `201` and the stored `shared::ActionType`, from a `shared::NewActionType` |
 | `GET /api/action-types/{id}` | The stored `shared::ActionType`, or `404` outside the caller's own partition |
@@ -198,10 +197,9 @@ code (DR-0020).
   policy cannot express user isolation — the function serves every user, so its
   permissions cover every partition — so a handler that took an owner from a
   request parameter would defeat it entirely — DR-0024.
-- **Every handler under `/api` must name `Owner`, even one that does not yet
-  use the value.** Gating moved from the route table to the handler's own
-  signature — DR-0028. A handler that forgets is reachable by anyone with no
-  token; `dashboard()` names it unused for exactly this reason.
+- **Every handler under `/api` must name `Owner`.** Gating moved from the
+  route table to the handler's own signature — DR-0028. A handler that
+  forgets is reachable by anyone with no token.
 - **`COGNITO_AUDIENCE` is a hand-maintained copy of what Cognito puts in a
   token's `client_id`/`aud`, and `COGNITO_ISSUER` of the pool's issuer URL.**
   Both come from SSM, resolved the same way `deploy-web`'s Cognito variables
@@ -232,5 +230,6 @@ code (DR-0020).
   manual, interactive check for anything those tests do not assert.
 - **`Scan` is not granted and no access pattern needs one.** Every query is
   inside one owner's partition — `persistence.md`.
-- **The dashboard is not connected to the store.** It answers from values in
-  `src/dashboard.rs`. Only the body of that handler changes when it is.
+- **The dashboard's ten-day summary buckets by UTC calendar day, not the
+  visitor's local one.** No per-user timezone is captured anywhere in this
+  system — DR-0033.
