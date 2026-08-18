@@ -15,6 +15,7 @@
 //! here — see DR-0009.
 
 mod action_types;
+mod actions;
 mod cognito;
 mod dashboard;
 mod identity;
@@ -91,6 +92,13 @@ fn router(state: AppState) -> Router {
                 .put(action_types::update)
                 .delete(action_types::delete),
         )
+        .route("/api/actions", get(actions::list).post(actions::create))
+        .route(
+            "/api/actions/{id}",
+            get(actions::get_one)
+                .put(actions::update)
+                .delete(actions::delete),
+        )
         .with_state(state)
 }
 
@@ -107,9 +115,6 @@ async fn health() -> &'static str {
 /// are checked once, at the boundary that actually receives them — testing.md.
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use serde_json::{Value, json};
@@ -122,7 +127,7 @@ mod tests {
 
     fn memory_state(auth: Auth) -> AppState {
         AppState {
-            store: Arc::new(Store::Memory(Mutex::new(HashMap::new()))),
+            store: Arc::new(Store::memory()),
             auth: Arc::new(auth),
         }
     }
@@ -307,5 +312,113 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(json_body(response).await, json!([]));
+    }
+
+    /// The action-record counterpart of
+    /// `creating_and_then_listing_goes_through_the_router`: a type is
+    /// registered first, a record against it is created, updated and read
+    /// back, and finally deleted — the full lifecycle through routing,
+    /// extraction and (de)serialisation, not just the handler's own return
+    /// value.
+    #[tokio::test]
+    async fn recording_updating_and_deleting_an_action_goes_through_the_router() {
+        let app = router(memory_state(Auth::Mock));
+
+        let create_type = mock_caller(
+            Request::post("/api/action-types")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"name": "Running", "unit": "km", "icon": "footprints"}).to_string(),
+                ))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(create_type).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let action_type = json_body(response).await;
+        let type_id = action_type["id"].as_str().unwrap().to_owned();
+
+        let create_record = mock_caller(
+            Request::post("/api/actions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"type_id": type_id, "value": 5.2}).to_string(),
+                ))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(create_record).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created = json_body(response).await;
+        assert_eq!(created["action_type"], action_type);
+        assert_eq!(created["value"], 5.2);
+        let record_id = created["id"].as_str().unwrap().to_owned();
+
+        let list = mock_caller(
+            Request::get("/api/actions").body(Body::empty()).unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(list).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json_body(response).await, json!([created]));
+
+        let update = mock_caller(
+            Request::put(format!("/api/actions/{record_id}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"value": 6.0}).to_string()))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(update).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let updated = json_body(response).await;
+        assert_eq!(updated["value"], 6.0);
+        assert_eq!(updated["id"], record_id.clone());
+
+        let get = mock_caller(
+            Request::get(format!("/api/actions/{record_id}"))
+                .body(Body::empty())
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(get).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json_body(response).await, updated);
+
+        let delete = mock_caller(
+            Request::delete(format!("/api/actions/{record_id}"))
+                .body(Body::empty())
+                .unwrap(),
+            "alice",
+        );
+        let response = app.clone().oneshot(delete).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let list_again = mock_caller(
+            Request::get("/api/actions").body(Body::empty()).unwrap(),
+            "alice",
+        );
+        let response = app.oneshot(list_again).await.unwrap();
+        assert_eq!(json_body(response).await, json!([]));
+    }
+
+    /// `type_id` naming nothing in the caller's own partition is a `400`, not
+    /// a `404` — it is a body field, not the URL's own addressed resource.
+    #[tokio::test]
+    async fn creating_an_action_for_an_unknown_type_is_400_through_the_router() {
+        let app = router(memory_state(Auth::Mock));
+
+        let create_record = mock_caller(
+            Request::post("/api/actions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"type_id": "not-a-real-id", "value": 5.2}).to_string(),
+                ))
+                .unwrap(),
+            "alice",
+        );
+        let response = app.oneshot(create_record).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

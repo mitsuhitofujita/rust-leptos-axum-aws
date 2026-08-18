@@ -15,7 +15,9 @@ use std::fmt;
 use gloo_net::http::{RequestBuilder, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use shared::{ActionType, Dashboard, NewActionType};
+use shared::{
+    ActionRecord, ActionType, Dashboard, NewActionRecord, NewActionType, UpdateActionRecord,
+};
 
 use crate::auth;
 
@@ -194,4 +196,36 @@ pub async fn update_action_type(id: &str, new: &NewActionType) -> Result<ActionT
 /// second call for the same id is not an error.
 pub async fn delete_action_type(id: &str) -> Result<(), ApiError> {
     delete(&format!("/api/action-types/{id}")).await
+}
+
+/// Every action record this account has, newest first.
+pub async fn fetch_action_records() -> Result<Vec<ActionRecord>, ApiError> {
+    get_json("/api/actions").await
+}
+
+/// Records one action against a registered type, and answers with it as
+/// stored — including the identifier the service assigned it and the type's
+/// display attributes as it copied them (DR-0016).
+pub async fn create_action_record(new: &NewActionRecord) -> Result<ActionRecord, ApiError> {
+    post_json("/api/actions", new).await
+}
+
+/// One action record by id, for the edit screen to fill its form from.
+pub async fn fetch_action_record(id: &str) -> Result<ActionRecord, ApiError> {
+    get_json(&format!("/api/actions/{id}")).await
+}
+
+/// Changes the recorded value, and answers with the record as stored. The
+/// type and its copied display attributes are fixed once a record is
+/// created — DR-0016 — so there is nothing else to send.
+pub async fn update_action_record(
+    id: &str,
+    new: &UpdateActionRecord,
+) -> Result<ActionRecord, ApiError> {
+    put_json(&format!("/api/actions/{id}"), new).await
+}
+
+/// Removes an action record. Idempotent, like `delete_action_type`.
+pub async fn delete_action_record(id: &str) -> Result<(), ApiError> {
+    delete(&format!("/api/actions/{id}")).await
 }

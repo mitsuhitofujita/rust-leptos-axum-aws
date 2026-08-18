@@ -1019,7 +1019,8 @@ h1 em {
   transition: transform 160ms ease;
 }
 
-.type-link:hover .edit-icon {
+.type-link:hover .edit-icon,
+.activity-link:hover .edit-icon {
   transform: translateX(2px);
 }
 
@@ -1028,10 +1029,12 @@ h1 em {
   height: 12px;
 }
 
-/* The state the HTML reference does not define. Every account starts here, so
-   it needs one — and it keeps the surface the populated list has, so the screen
-   does not change shape when the first type lands on it. */
-.empty-types {
+/* A dashed-outline placeholder for a list or a form with nothing to show yet
+   — no HTML reference defines any of these states. Shared across the
+   action-types index (every account starts here), the actions index (before
+   the first record), and action creation (before the first type is
+   registered), so the screen never changes shape once the first item lands. */
+.empty-state {
   margin: 0;
   padding: var(--space-lg);
   border: 1px dashed var(--rose-200);
@@ -1165,6 +1168,93 @@ h1 em {
 .result-icon svg {
   width: 20px;
   height: 20px;
+}
+
+/* --- Action recording: value field, and the edit screen's read-only ones - */
+
+.value-input-wrap {
+  position: relative;
+}
+
+.value-input {
+  padding-right: 68px;
+}
+
+.value-unit {
+  position: absolute;
+  top: 50%;
+  right: var(--space-md);
+  color: var(--muted);
+  font-size: var(--font-small);
+  font-weight: 800;
+  transform: translateY(-50%);
+}
+
+/* The type an action record belongs to, and when it was recorded, are shown
+   but not editable on the edit screen — DR-0016 fixes the first, and nothing
+   in this design lets the second change either. */
+.type-readonly {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--space-md);
+  background: var(--rose-50);
+}
+
+.type-readonly-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.type-readonly-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.type-readonly-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.type-readonly-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-readonly-unit {
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.readonly-value {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  margin: 0;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--space-md);
+  color: var(--ink);
+  background: var(--rose-50);
+  font-size: var(--font-body);
+  font-weight: 700;
 }
 
 .form-actions {
@@ -1382,7 +1472,13 @@ h1 em {
   line-height: 1.625;
 }
 
-.type-summary {
+/* `.activity-summary` is the same box around the action-record delete
+   dialog's icon/name/time/value row, which reuses `.activity-icon` and its
+   siblings verbatim — that row already pushes its value to the end with
+   `margin-left: auto` rather than needing `.type-copy`'s `flex: 1`, so no
+   further class is needed for it to sit here. */
+.type-summary,
+.activity-summary {
   display: flex;
   min-height: 56px;
   align-items: center;
@@ -1481,11 +1577,104 @@ h1 em {
   }
 }
 
-/* --- Icon picker --------------------------------------------------------- */
+/* --- Action recording: type picker ---------------------------------------
+   The `Action type` field's compact trigger. Genuinely new — unlike the
+   dialog below, `.icon-select` is icon-only and has no name or unit to show,
+   so it is not reused here. */
 
-/* A native dialog: it is what keeps focus inside, closes on Escape, and returns
-   nothing to the form on its own — DR-0013. */
-.icon-dialog {
+.type-select {
+  display: flex;
+  width: 100%;
+  min-height: 68px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid #e6d6db;
+  border-radius: var(--space-md);
+  color: inherit;
+  background: var(--white);
+  box-shadow: inset 0 1px 2px rgba(93, 40, 57, 0.025);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.type-select:hover {
+  border-color: #d5aab6;
+  box-shadow: 0 5px 14px rgba(93, 40, 57, 0.06);
+  transform: translateY(-1px);
+}
+
+.type-select:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.type-select-icon {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  flex: 0 0 auto;
+  border-radius: var(--space-md);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  place-items: center;
+}
+
+.type-select-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.type-select-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.type-select-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-select-unit {
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.type-select-chevron {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--accent-dark);
+  background: var(--rose-100);
+  place-items: center;
+}
+
+.type-select-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* --- Icon picker and type picker -------------------------------------------
+   Both are native dialogs sharing one shape: `showModal` keeps focus inside
+   and closes on Escape, and returns nothing to the form on its own — DR-0013,
+   generalized from choosing an icon to choosing a registered action type.
+   Every rule below is one dialog's CSS, written once. */
+.icon-dialog,
+.type-dialog {
   width: calc(100% - (2 * var(--client-gutter)));
   max-width: calc(var(--app-width) - (2 * var(--client-gutter)));
   max-height: calc(100dvh - (2 * var(--space-md)));
@@ -1499,24 +1688,28 @@ h1 em {
   box-shadow: 0 26px 70px rgba(41, 21, 28, 0.28);
 }
 
-.icon-dialog[open] {
+.icon-dialog[open],
+.type-dialog[open] {
   animation: enter 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
-.icon-dialog::backdrop {
+.icon-dialog::backdrop,
+.type-dialog::backdrop {
   background: rgba(41, 21, 28, 0.46);
   backdrop-filter: blur(var(--space-2xs));
   -webkit-backdrop-filter: blur(var(--space-2xs));
 }
 
-.icon-dialog-header {
+.icon-dialog-header,
+.type-dialog-header {
   display: flex;
   align-items: start;
   justify-content: space-between;
   gap: var(--space-md);
 }
 
-.icon-dialog-label {
+.icon-dialog-label,
+.type-dialog-label {
   margin: 0 0 var(--space-xs);
   color: var(--accent-dark);
   font-size: var(--font-caption);
@@ -1525,7 +1718,8 @@ h1 em {
   text-transform: uppercase;
 }
 
-.icon-dialog h2 {
+.icon-dialog h2,
+.type-dialog h2 {
   margin: 0;
   font-size: var(--font-title);
   font-weight: 800;
@@ -1533,7 +1727,8 @@ h1 em {
   line-height: 1.08;
 }
 
-.icon-dialog-close {
+.icon-dialog-close,
+.type-dialog-close {
   display: grid;
   width: var(--space-xl);
   height: var(--space-xl);
@@ -1547,19 +1742,24 @@ h1 em {
   place-items: center;
 }
 
-.icon-dialog-close:hover {
+.icon-dialog-close:hover,
+.type-dialog-close:hover {
   color: var(--ink);
   background: var(--rose-100);
 }
 
 .icon-dialog-close:focus-visible,
+.type-dialog-close:focus-visible,
 .icon-search:focus-visible,
-.apply-icon-button:focus-visible {
+.type-search:focus-visible,
+.apply-icon-button:focus-visible,
+.apply-type-button:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 3px;
 }
 
-.icon-dialog-close svg {
+.icon-dialog-close svg,
+.type-dialog-close svg {
   width: 16px;
   height: 16px;
 }
@@ -1570,7 +1770,8 @@ h1 em {
   margin-top: var(--space-lg);
 }
 
-.icon-search {
+.icon-search,
+.type-search {
   width: 100%;
   min-height: 56px;
   padding: 0 var(--space-md);
@@ -1581,7 +1782,8 @@ h1 em {
   font-size: var(--font-body);
 }
 
-.icon-search::placeholder {
+.icon-search::placeholder,
+.type-search::placeholder {
   color: #b298a0;
   opacity: 1;
 }
@@ -1593,7 +1795,8 @@ h1 em {
   font-weight: 700;
 }
 
-.icon-results {
+.icon-results,
+.type-results {
   display: grid;
   max-height: 42dvh;
   overflow-y: auto;
@@ -1602,7 +1805,8 @@ h1 em {
   overscroll-behavior: contain;
 }
 
-.icon-result {
+.icon-result,
+.type-result {
   position: relative;
   display: block;
   cursor: pointer;
@@ -1610,7 +1814,8 @@ h1 em {
 
 /* The radio is what carries the group's keyboard behaviour and its checked
    state, so it is hidden rather than replaced. */
-.icon-result input {
+.icon-result input,
+.type-result input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1618,7 +1823,8 @@ h1 em {
   opacity: 0;
 }
 
-.icon-result-surface {
+.icon-result-surface,
+.type-result-surface {
   display: flex;
   min-height: 56px;
   align-items: center;
@@ -1632,18 +1838,21 @@ h1 em {
     background-color 160ms ease;
 }
 
-.icon-result:hover .icon-result-surface {
+.icon-result:hover .icon-result-surface,
+.type-result:hover .type-result-surface {
   background: var(--rose-50);
 }
 
-.icon-result input:checked + .icon-result-surface {
+.icon-result input:checked + .icon-result-surface,
+.type-result input:checked + .type-result-surface {
   border-color: var(--rose-200);
   background: var(--rose-100);
 }
 
 /* Focus stays visually distinct from the checked state: they are different
    things and either can be true without the other. */
-.icon-result input:focus-visible + .icon-result-surface {
+.icon-result input:focus-visible + .icon-result-surface,
+.type-result input:focus-visible + .type-result-surface {
   outline: var(--focus-ring);
   outline-offset: -1px;
 }
@@ -1659,9 +1868,29 @@ h1 em {
   place-items: center;
 }
 
+/* Only the type picker's rows need a wrapper: an icon row has nothing after
+   `.result-name` but the checkmark, so it needs no `flex: 1` sibling the way
+   a type row does to keep its trailing `.result-unit` pinned to the end. */
+.result-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
 .result-name {
+  overflow: hidden;
   font-size: 14px;
   font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-unit {
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .result-check {
@@ -1676,7 +1905,8 @@ h1 em {
   place-items: center;
 }
 
-.icon-result input:checked + .icon-result-surface .result-check {
+.icon-result input:checked + .icon-result-surface .result-check,
+.type-result input:checked + .type-result-surface .result-check {
   opacity: 1;
 }
 
@@ -1693,11 +1923,13 @@ h1 em {
   text-align: center;
 }
 
-.icon-result[hidden] {
+.icon-result[hidden],
+.type-result[hidden] {
   display: none;
 }
 
-.apply-icon-button {
+.apply-icon-button,
+.apply-type-button {
   width: 100%;
   min-height: 56px;
   margin-top: var(--space-md);
@@ -1712,7 +1944,8 @@ h1 em {
   cursor: pointer;
 }
 
-.apply-icon-button:disabled {
+.apply-icon-button:disabled,
+.apply-type-button:disabled {
   box-shadow: none;
   cursor: not-allowed;
   opacity: 0.45;
@@ -1809,6 +2042,7 @@ h1 em {
   }
 
   .icon-dialog,
+  .type-dialog,
   .confirm-dialog {
     padding: var(--space-md);
   }

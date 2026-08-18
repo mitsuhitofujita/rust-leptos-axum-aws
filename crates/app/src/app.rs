@@ -7,6 +7,7 @@ use leptos_router::hooks::use_navigate;
 use leptos_router::path;
 
 use crate::action_types::{ActionTypesPage, EditActionTypePage, NewActionTypePage};
+use crate::actions::{ActionsPage, EditActionPage, NewActionPage};
 use crate::auth::{self, AuthState};
 use crate::dashboard::DashboardPage;
 use crate::home::{HomePage, ProfileImage};
@@ -92,6 +93,20 @@ pub fn App() -> impl IntoView {
                         <Route
                             path=path!("/action-types/:id")
                             view=|| view! { <RequireAuth><EditActionTypePage /></RequireAuth> }
+                        />
+                        // Same ordering rationale as the action-type routes
+                        // above: creation before the index.
+                        <Route
+                            path=path!("/actions/new")
+                            view=|| view! { <RequireAuth><NewActionPage /></RequireAuth> }
+                        />
+                        <Route
+                            path=path!("/actions")
+                            view=|| view! { <RequireAuth><ActionsPage /></RequireAuth> }
+                        />
+                        <Route
+                            path=path!("/actions/:id")
+                            view=|| view! { <RequireAuth><EditActionPage /></RequireAuth> }
                         />
                     </Routes>
                 </main>
@@ -252,9 +267,6 @@ pub fn AccountControl() -> impl IntoView {
             </button>
 
             <div class="menu-list">
-                // `/actions` has no screen yet and resolves to the router's
-                // `NotFound` fallback — reachable by design, the same way a
-                // dashboard row's repeat link is.
                 <A href="/actions" attr:class="menu-link">
                     <span class="menu-icon" aria-hidden="true"><Pulse /></span>
                     <span>"Action"</span>
@@ -292,10 +304,6 @@ pub fn SiteHeader(#[prop(optional)] children: Option<Children>) -> impl IntoView
 }
 
 /// Answers every path the router does not know.
-///
-/// One of those paths is reachable by design rather than by mistake: a
-/// dashboard row links to action creation, which has no screen yet. The link
-/// points where it will eventually go and this answers until it arrives.
 #[component]
 fn NotFound() -> impl IntoView {
     view! {

@@ -118,7 +118,7 @@ fn TypeList(types: Vec<ActionType>) -> impl IntoView {
                 // account begins in this one. The control above is already the
                 // way out of it, so this says what is missing and nothing more.
                 view! {
-                    <p class="empty-types">
+                    <p class="empty-state">
                         "Nothing registered yet. Add an action type and it will wait here, "
                         "ready to record."
                     </p>

@@ -50,6 +50,23 @@ pub struct ActionRecord {
     pub recorded_at: String,
 }
 
+/// What creating an action record takes: which action type it belongs to and
+/// the recorded value. The service copies the type's `name`/`unit`/`icon` at
+/// creation time and mints `id` and `recorded_at` itself (DR-0016).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NewActionRecord {
+    pub type_id: String,
+    pub value: f64,
+}
+
+/// What updating an action record takes: only the value. The type a record
+/// belongs to, and the display attributes copied from it, are fixed once the
+/// record is created — DR-0016.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateActionRecord {
+    pub value: f64,
+}
+
 /// The recent ten-day window, oldest day first.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecentSummary {

@@ -14,7 +14,7 @@ use std::sync::Mutex;
 
 use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::types::AttributeValue;
-use shared::{ActionType, NewActionType};
+use shared::{ActionRecord, ActionType, NewActionRecord, NewActionType, UpdateActionRecord};
 use time::OffsetDateTime;
 use time::format_description::BorrowedFormatItem;
 use time::macros::format_description;
@@ -29,6 +29,7 @@ const TABLE_NAME: &str = "TABLE_NAME";
 
 const PARTITION_PREFIX: &str = "USER#";
 const TYPE_PREFIX: &str = "TYPE#";
+const RECORD_PREFIX: &str = "RECORD#";
 
 /// Fixed-width RFC 3339 in UTC: always a `Z` offset, always three fractional
 /// digits.
@@ -57,9 +58,14 @@ pub enum Store {
         client: Box<Client>,
         table: String,
     },
-    /// Development. Keyed by owner, and each owner's types are held in the
-    /// order they were created, which is the order the table would return them.
-    Memory(Mutex<HashMap<String, Vec<ActionType>>>),
+    /// Development. Keyed by owner, one map per entity kind — mirroring the
+    /// one DynamoDB table both live in, split by `sk` prefix instead of by
+    /// map. Each owner's types and records are held in the order they were
+    /// created, which is the order the table would return them.
+    Memory {
+        types: Mutex<HashMap<String, Vec<ActionType>>>,
+        records: Mutex<HashMap<String, Vec<ActionRecord>>>,
+    },
 }
 
 impl Store {
@@ -73,7 +79,10 @@ impl Store {
                     table,
                 }
             }
-            _ => Self::Memory(Mutex::new(HashMap::new())),
+            _ => Self::Memory {
+                types: Mutex::new(HashMap::new()),
+                records: Mutex::new(HashMap::new()),
+            },
         }
     }
 
@@ -82,7 +91,7 @@ impl Store {
     pub fn describe(&self) -> String {
         match self {
             Self::Dynamo { table, .. } => format!("DynamoDB table {table}"),
-            Self::Memory(_) => format!("memory (no {TABLE_NAME} is set)"),
+            Self::Memory { .. } => format!("memory (no {TABLE_NAME} is set)"),
         }
     }
 
@@ -113,7 +122,7 @@ impl Store {
                     .filter_map(action_type)
                     .collect())
             }
-            Self::Memory(types) => Ok(types
+            Self::Memory { types, .. } => Ok(types
                 .lock()
                 .map_err(|_| StoreError("the store is poisoned".to_owned()))?
                 .get(owner)
@@ -142,7 +151,7 @@ impl Store {
 
                 Ok(response.item.and_then(action_type))
             }
-            Self::Memory(types) => Ok(types
+            Self::Memory { types, .. } => Ok(types
                 .lock()
                 .map_err(|_| StoreError("the store is poisoned".to_owned()))?
                 .get(owner)
@@ -188,7 +197,7 @@ impl Store {
                     .await
                     .map_err(|err| StoreError(format!("could not store the action type: {err}")))?;
             }
-            Self::Memory(types) => {
+            Self::Memory { types, .. } => {
                 types
                     .lock()
                     .map_err(|_| StoreError("the store is poisoned".to_owned()))?
@@ -268,7 +277,7 @@ impl Store {
                     },
                 }
             }
-            Self::Memory(types) => {
+            Self::Memory { types, .. } => {
                 let mut types = types
                     .lock()
                     .map_err(|_| StoreError("the store is poisoned".to_owned()))?;
@@ -310,8 +319,222 @@ impl Store {
                         StoreError(format!("could not delete the action type: {err}"))
                     })?;
             }
-            Self::Memory(types) => {
+            Self::Memory { types, .. } => {
                 if let Some(owned) = types
+                    .lock()
+                    .map_err(|_| StoreError("the store is poisoned".to_owned()))?
+                    .get_mut(owner)
+                {
+                    owned.retain(|existing| existing.id != id);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// One owner's action records, newest first — the reverse of
+    /// [`Store::list_action_types`], because a history reads newest first
+    /// where a set of registered types reads in the order they were added.
+    pub async fn list_action_records(&self, owner: &str) -> Result<Vec<ActionRecord>, StoreError> {
+        match self {
+            Self::Dynamo { client, table } => {
+                let response = client
+                    .query()
+                    .table_name(table)
+                    .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                    .expression_attribute_values(":pk", AttributeValue::S(partition(owner)))
+                    .expression_attribute_values(
+                        ":prefix",
+                        AttributeValue::S(RECORD_PREFIX.to_owned()),
+                    )
+                    .scan_index_forward(false)
+                    .send()
+                    .await
+                    .map_err(|err| StoreError(format!("could not read actions: {err}")))?;
+
+                Ok(response
+                    .items
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(action_record)
+                    .collect())
+            }
+            Self::Memory { records, .. } => Ok(records
+                .lock()
+                .map_err(|_| StoreError("the store is poisoned".to_owned()))?
+                .get(owner)
+                .map(|owned| owned.iter().rev().cloned().collect())
+                .unwrap_or_default()),
+        }
+    }
+
+    /// Records one action against a registered type, copying that type's
+    /// display attributes as they stand right now (DR-0016). `None` means
+    /// `type_id` names no action type in this owner's own partition — not a
+    /// [`StoreError`], because the caller sent a name that does not resolve
+    /// rather than the store failing to answer.
+    pub async fn create_action_record(
+        &self,
+        owner: &str,
+        new: NewActionRecord,
+    ) -> Result<Option<ActionRecord>, StoreError> {
+        let Some(action_type) = self.get_action_type(owner, &new.type_id).await? else {
+            return Ok(None);
+        };
+
+        let id = Ulid::generate().to_string();
+        let recorded_at = now()?;
+        let record = ActionRecord {
+            id,
+            action_type,
+            value: new.value,
+            recorded_at,
+        };
+
+        match self {
+            Self::Dynamo { client, table } => {
+                client
+                    .put_item()
+                    .table_name(table)
+                    .item("pk", AttributeValue::S(partition(owner)))
+                    .item(
+                        "sk",
+                        AttributeValue::S(record_key(&record.recorded_at, &record.id)),
+                    )
+                    .item("type_id", AttributeValue::S(record.action_type.id.clone()))
+                    .item("name", AttributeValue::S(record.action_type.name.clone()))
+                    .item("unit", AttributeValue::S(record.action_type.unit.clone()))
+                    .item("icon", AttributeValue::S(record.action_type.icon.clone()))
+                    .item("value", AttributeValue::N(record.value.to_string()))
+                    .item("recorded_at", AttributeValue::S(record.recorded_at.clone()))
+                    .send()
+                    .await
+                    .map_err(|err| StoreError(format!("could not store the action: {err}")))?;
+            }
+            Self::Memory { records, .. } => {
+                records
+                    .lock()
+                    .map_err(|_| StoreError("the store is poisoned".to_owned()))?
+                    .entry(owner.to_owned())
+                    .or_default()
+                    .push(record.clone());
+            }
+        }
+
+        Ok(Some(record))
+    }
+
+    /// One action record by id, or `None` if it is not in this owner's
+    /// partition.
+    ///
+    /// Unlike an action type's `TYPE#<ulid>`, a record's key is
+    /// `RECORD#<recorded_at>#<ulid>` — the id alone cannot reconstruct it, so
+    /// the `Dynamo` variant queries the owner's whole `RECORD#` range and
+    /// matches the trailing id instead of adding a secondary index for a
+    /// pattern this project's scale does not yet need (see the Work Log this
+    /// choice was confirmed in, and the Decision Record it produced).
+    pub async fn get_action_record(
+        &self,
+        owner: &str,
+        id: &str,
+    ) -> Result<Option<ActionRecord>, StoreError> {
+        match self {
+            Self::Dynamo { client, table } => find_action_record(client, table, owner, id).await,
+            Self::Memory { records, .. } => Ok(records
+                .lock()
+                .map_err(|_| StoreError("the store is poisoned".to_owned()))?
+                .get(owner)
+                .and_then(|owned| owned.iter().find(|existing| existing.id == id).cloned())),
+        }
+    }
+
+    /// Changes the recorded value, and answers with the record as stored — or
+    /// `None` if `id` is not in this owner's partition. Everything else about
+    /// the record — its type, the copied display attributes, `recorded_at` —
+    /// is untouched; only `value` is ever editable (DR-0016).
+    pub async fn update_action_record(
+        &self,
+        owner: &str,
+        id: &str,
+        new: UpdateActionRecord,
+    ) -> Result<Option<ActionRecord>, StoreError> {
+        match self {
+            Self::Dynamo { client, table } => {
+                let Some(mut record) = find_action_record(client, table, owner, id).await? else {
+                    return Ok(None);
+                };
+
+                match client
+                    .update_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S(partition(owner)))
+                    .key(
+                        "sk",
+                        AttributeValue::S(record_key(&record.recorded_at, &record.id)),
+                    )
+                    // Guards against a delete landing between the query above
+                    // and this write, the same defence `update_action_type`
+                    // uses against creating an item that should not exist.
+                    .condition_expression("attribute_exists(pk)")
+                    .update_expression("SET #value = :value")
+                    .expression_attribute_names("#value", "value")
+                    .expression_attribute_values(":value", AttributeValue::N(new.value.to_string()))
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        record.value = new.value;
+                        Ok(Some(record))
+                    }
+                    Err(err) => match err.as_service_error() {
+                        Some(service_err)
+                            if service_err.is_conditional_check_failed_exception() =>
+                        {
+                            Ok(None)
+                        }
+                        _ => Err(StoreError(format!("could not update the action: {err}"))),
+                    },
+                }
+            }
+            Self::Memory { records, .. } => {
+                let mut records = records
+                    .lock()
+                    .map_err(|_| StoreError("the store is poisoned".to_owned()))?;
+                let owned = records.entry(owner.to_owned()).or_default();
+
+                match owned.iter_mut().find(|existing| existing.id == id) {
+                    Some(existing) => {
+                        existing.value = new.value;
+                        Ok(Some(existing.clone()))
+                    }
+                    None => Ok(None),
+                }
+            }
+        }
+    }
+
+    /// Removes one action record. Idempotent, like [`Store::delete_action_type`]:
+    /// whether `id` was there or not, the answer is the same.
+    pub async fn delete_action_record(&self, owner: &str, id: &str) -> Result<(), StoreError> {
+        match self {
+            Self::Dynamo { client, table } => {
+                if let Some(record) = find_action_record(client, table, owner, id).await? {
+                    client
+                        .delete_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(partition(owner)))
+                        .key(
+                            "sk",
+                            AttributeValue::S(record_key(&record.recorded_at, &record.id)),
+                        )
+                        .send()
+                        .await
+                        .map_err(|err| StoreError(format!("could not delete the action: {err}")))?;
+                }
+            }
+            Self::Memory { records, .. } => {
+                if let Some(owned) = records
                     .lock()
                     .map_err(|_| StoreError("the store is poisoned".to_owned()))?
                     .get_mut(owner)
@@ -344,6 +567,67 @@ fn action_type(item: HashMap<String, AttributeValue>) -> Option<ActionType> {
     })
 }
 
+/// The full sort key for one action record, given the two components its
+/// bare id does not carry.
+fn record_key(recorded_at: &str, id: &str) -> String {
+    format!("{RECORD_PREFIX}{recorded_at}#{id}")
+}
+
+/// One stored item as the wire sees it, or nothing if it is not a record —
+/// including a `TYPE#` item, which `strip_prefix` rejects the same way
+/// [`action_type`] rejects a `RECORD#` one.
+fn action_record(item: HashMap<String, AttributeValue>) -> Option<ActionRecord> {
+    let id = string(&item, "sk")?
+        .strip_prefix(RECORD_PREFIX)?
+        .rsplit_once('#')?
+        .1
+        .to_owned();
+    let value: f64 = item.get("value")?.as_n().ok()?.parse().ok()?;
+
+    Some(ActionRecord {
+        id,
+        action_type: ActionType {
+            id: string(&item, "type_id")?.to_owned(),
+            name: string(&item, "name")?.to_owned(),
+            unit: string(&item, "unit")?.to_owned(),
+            icon: string(&item, "icon")?.to_owned(),
+        },
+        value,
+        recorded_at: string(&item, "recorded_at")?.to_owned(),
+    })
+}
+
+/// Locates one action record by the bare id the API exposes.
+///
+/// A record's key is `RECORD#<recorded_at>#<ulid>` — unlike an action type's
+/// `TYPE#<ulid>`, the id alone cannot reconstruct it, so this queries the
+/// owner's whole `RECORD#` range and matches the trailing id, rather than
+/// adding a secondary index for a pattern this project's scale does not yet
+/// need.
+async fn find_action_record(
+    client: &Client,
+    table: &str,
+    owner: &str,
+    id: &str,
+) -> Result<Option<ActionRecord>, StoreError> {
+    let response = client
+        .query()
+        .table_name(table)
+        .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+        .expression_attribute_values(":pk", AttributeValue::S(partition(owner)))
+        .expression_attribute_values(":prefix", AttributeValue::S(RECORD_PREFIX.to_owned()))
+        .send()
+        .await
+        .map_err(|err| StoreError(format!("could not read actions: {err}")))?;
+
+    Ok(response
+        .items
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(action_record)
+        .find(|record| record.id == id))
+}
+
 fn string<'item>(item: &'item HashMap<String, AttributeValue>, key: &str) -> Option<&'item str> {
     item.get(key)?.as_s().ok().map(String::as_str)
 }
@@ -352,6 +636,19 @@ fn now() -> Result<String, StoreError> {
     OffsetDateTime::now_utc()
         .format(TIMESTAMP)
         .map_err(|err| StoreError(format!("could not format the current time: {err}")))
+}
+
+#[cfg(test)]
+impl Store {
+    /// An empty `Memory` store, for tests that do not care what is in it —
+    /// only this file's tests and `main.rs`'s router-level tests construct
+    /// one, and both would otherwise repeat the two-map literal by hand.
+    pub(crate) fn memory() -> Self {
+        Self::Memory {
+            types: Mutex::new(HashMap::new()),
+            records: Mutex::new(HashMap::new()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -402,7 +699,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_memory_store_keeps_creation_order_per_owner() {
-        let store = Store::Memory(Mutex::new(HashMap::new()));
+        let store = Store::memory();
         for name in ["Running", "Water"] {
             store
                 .create_action_type(
@@ -444,7 +741,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_fetched_type_is_none_outside_its_owners_partition() {
-        let store = Store::Memory(Mutex::new(HashMap::new()));
+        let store = Store::memory();
         let created = store
             .create_action_type("someone", proposed("Running", "km", "footprints"))
             .await
@@ -470,7 +767,7 @@ mod tests {
 
     #[tokio::test]
     async fn updating_keeps_the_id_and_creation_order_but_changes_the_rest() {
-        let store = Store::Memory(Mutex::new(HashMap::new()));
+        let store = Store::memory();
         let first = store
             .create_action_type("someone", proposed("Running", "km", "footprints"))
             .await
@@ -498,7 +795,7 @@ mod tests {
     /// edit — answered as "not found" rather than silently creating one.
     #[tokio::test]
     async fn updating_a_stranger_to_the_partition_answers_none() {
-        let store = Store::Memory(Mutex::new(HashMap::new()));
+        let store = Store::memory();
 
         let result = store
             .update_action_type(
@@ -514,7 +811,7 @@ mod tests {
 
     #[tokio::test]
     async fn deleting_removes_only_the_named_type() {
-        let store = Store::Memory(Mutex::new(HashMap::new()));
+        let store = Store::memory();
         let first = store
             .create_action_type("someone", proposed("Running", "km", "footprints"))
             .await
@@ -537,10 +834,246 @@ mod tests {
     /// `DeleteItem` does not fail on a missing key, and neither does this.
     #[tokio::test]
     async fn deleting_a_type_that_is_not_there_is_not_an_error() {
-        let store = Store::Memory(Mutex::new(HashMap::new()));
+        let store = Store::memory();
 
         store
             .delete_action_type("someone", "not-a-real-id")
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn creating_a_record_copies_the_types_current_display_attributes() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+
+        let created = store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: action_type.id.clone(),
+                    value: 5.2,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(created.action_type, action_type);
+        assert_eq!(created.value, 5.2);
+        assert_eq!(created.recorded_at.len(), 24);
+    }
+
+    /// A record does not follow the type it was created from: DR-0016.
+    #[tokio::test]
+    async fn editing_a_type_does_not_change_a_records_copied_attributes() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+        let created = store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: action_type.id.clone(),
+                    value: 5.2,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        store
+            .update_action_type(
+                "someone",
+                &action_type.id,
+                proposed("Jogging", "mi", "timer"),
+            )
+            .await
+            .unwrap();
+
+        let unchanged = store
+            .get_action_record("someone", &created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchanged.action_type.name, "Running");
+    }
+
+    /// `type_id` naming nothing in this owner's partition is `None`, the same
+    /// shape `update_action_type` already answers a stranger id with.
+    #[tokio::test]
+    async fn creating_a_record_for_an_unknown_type_answers_none() {
+        let store = Store::memory();
+
+        let created = store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: "not-a-real-id".to_owned(),
+                    value: 1.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(created.is_none());
+    }
+
+    #[tokio::test]
+    async fn listing_records_is_newest_first() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+
+        let mut created_values = Vec::new();
+        for value in [1.0, 2.0, 3.0] {
+            let record = store
+                .create_action_record(
+                    "someone",
+                    NewActionRecord {
+                        type_id: action_type.id.clone(),
+                        value,
+                    },
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            created_values.push(record.value);
+        }
+
+        let listed = store.list_action_records("someone").await.unwrap();
+        let values: Vec<f64> = listed.iter().map(|record| record.value).collect();
+        assert_eq!(values, [3.0, 2.0, 1.0]);
+    }
+
+    #[tokio::test]
+    async fn a_fetched_record_is_none_outside_its_owners_partition() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+        let created = store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: action_type.id,
+                    value: 5.2,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(
+            store
+                .get_action_record("someone-else", &created.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn updating_a_record_changes_only_the_value() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+        let created = store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: action_type.id,
+                    value: 5.2,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        let updated = store
+            .update_action_record("someone", &created.id, UpdateActionRecord { value: 6.0 })
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated.value, 6.0);
+        assert_eq!(updated.id, created.id);
+        assert_eq!(updated.recorded_at, created.recorded_at);
+        assert_eq!(updated.action_type, created.action_type);
+    }
+
+    #[tokio::test]
+    async fn updating_a_stranger_record_answers_none() {
+        let store = Store::memory();
+
+        let result = store
+            .update_action_record(
+                "someone",
+                "not-a-real-id",
+                UpdateActionRecord { value: 1.0 },
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn deleting_removes_only_the_named_record() {
+        let store = Store::memory();
+        let action_type = store
+            .create_action_type("someone", proposed("Running", "km", "footprints"))
+            .await
+            .unwrap();
+        let first = store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: action_type.id.clone(),
+                    value: 1.0,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        store
+            .create_action_record(
+                "someone",
+                NewActionRecord {
+                    type_id: action_type.id,
+                    value: 2.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        store
+            .delete_action_record("someone", &first.id)
+            .await
+            .unwrap();
+
+        let remaining = store.list_action_records("someone").await.unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].value, 2.0);
+    }
+
+    /// `DeleteItem` does not fail on a missing key, and neither does this.
+    #[tokio::test]
+    async fn deleting_a_record_that_is_not_there_is_not_an_error() {
+        let store = Store::memory();
+
+        store
+            .delete_action_record("someone", "not-a-real-id")
             .await
             .unwrap();
     }
@@ -678,6 +1211,121 @@ mod dynamo_tests {
 
         store
             .delete_action_type(&owner, "not-a-real-id")
+            .await
+            .unwrap();
+    }
+
+    /// The action-record counterpart of `keeps_query_order_per_owner`, and
+    /// what actually exercises `scan_index_forward(false)` — nothing in
+    /// `Memory` has a separate code path for query direction, since it just
+    /// reverses a `Vec`.
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn lists_records_newest_first() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("record-order");
+        let action_type = store
+            .create_action_type(
+                &owner,
+                NewActionType {
+                    name: "Running".to_owned(),
+                    unit: "km".to_owned(),
+                    icon: "footprints".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+
+        for value in [1.0, 2.0] {
+            store
+                .create_action_record(
+                    &owner,
+                    NewActionRecord {
+                        type_id: action_type.id.clone(),
+                        value,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let listed = store.list_action_records(&owner).await.unwrap();
+        let values: Vec<f64> = listed.iter().map(|record| record.value).collect();
+        assert_eq!(values, [2.0, 1.0]);
+    }
+
+    /// Exercises `find_action_record`'s `Query`-then-match path — the
+    /// approach this project chose over a secondary index for locating one
+    /// record by its bare id (see the Work Log and Decision Record this
+    /// choice produced).
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn a_fetched_record_is_none_outside_its_owners_partition() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("record-partition");
+        let action_type = store
+            .create_action_type(
+                &owner,
+                NewActionType {
+                    name: "Running".to_owned(),
+                    unit: "km".to_owned(),
+                    icon: "footprints".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        let created = store
+            .create_action_record(
+                &owner,
+                NewActionRecord {
+                    type_id: action_type.id,
+                    value: 5.2,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(
+            store
+                .get_action_record("someone-else", &created.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .get_action_record(&owner, &created.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .value,
+            5.2
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn updating_a_stranger_record_answers_none() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("update-stranger-record");
+
+        let result = store
+            .update_action_record(&owner, "not-a-real-id", UpdateActionRecord { value: 1.0 })
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    #[ignore = "needs `just dynamo` and `just dynamo-table`; see `just test-dynamo`"]
+    async fn deleting_a_record_that_is_not_there_is_not_an_error() {
+        let store = dynamo_store().await;
+        let owner = unique_owner("delete-missing-record");
+
+        store
+            .delete_action_record(&owner, "not-a-real-id")
             .await
             .unwrap();
     }
