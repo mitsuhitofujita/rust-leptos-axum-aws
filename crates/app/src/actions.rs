@@ -262,9 +262,8 @@ fn NewActionForm(types: Vec<ActionType>, preselected: Option<String>) -> impl In
                         <input
                             class="text-input value-input"
                             id="value"
-                            type="number"
+                            type="text"
                             inputmode="decimal"
-                            step="any"
                             placeholder="e.g. 5.2"
                             autocomplete="off"
                             aria-describedby="value-help"
@@ -459,9 +458,8 @@ fn EditActionForm(id: String, initial: ActionRecord) -> impl IntoView {
                         <input
                             class="text-input value-input"
                             id="value"
-                            type="number"
+                            type="text"
                             inputmode="decimal"
-                            step="any"
                             autocomplete="off"
                             aria-describedby="value-help"
                             required
