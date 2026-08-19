@@ -7,7 +7,8 @@
 //! shown with `showModal` keeps focus inside and closes on Escape, a text input
 //! does its own editing, and a radio group does its own arrow keys. None of that
 //! is reimplemented here. What is written is the filtering, the count, and the
-//! rule that a choice does not reach the form until it is applied.
+//! rule that activating a result row applies it and closes the dialog in the
+//! same action (DR-0035, narrowing DR-0013).
 
 use leptos::html::{Button, Dialog, Input};
 use leptos::prelude::*;
@@ -18,17 +19,14 @@ use crate::icons::{ActivityGlyph, Check, Close, Glyph};
 /// The `Icon` field of an action-type form.
 ///
 /// `icon` is the form's own signal and is written exactly once per visit to the
-/// picker: when `Use selected icon` is activated. Closing the dialog any other
-/// way leaves it alone (DR-0013).
+/// picker: when a result row is activated. Closing the dialog without
+/// selecting anything leaves it alone (DR-0035, narrowing DR-0013).
 #[component]
 pub fn IconField(icon: RwSignal<String>) -> impl IntoView {
     let dialog: NodeRef<Dialog> = NodeRef::new();
     let trigger: NodeRef<Button> = NodeRef::new();
     let search: NodeRef<Input> = NodeRef::new();
 
-    // What the visitor has picked but not yet applied. Separate from `icon`
-    // precisely so that dismissing the dialog can discard it.
-    let staged = RwSignal::new(String::new());
     let query = RwSignal::new(String::new());
     let expanded = RwSignal::new(false);
 
@@ -45,7 +43,6 @@ pub fn IconField(icon: RwSignal<String>) -> impl IntoView {
     let count = Memo::new(move |_| CATALOG.iter().filter(|entry| matches(entry)).count());
 
     let open = move |_| {
-        staged.set(icon.get_untracked());
         query.set(String::new());
         opened_once.set(true);
         expanded.set(true);
@@ -67,30 +64,30 @@ pub fn IconField(icon: RwSignal<String>) -> impl IntoView {
         }
     };
 
-    let apply = move |_| {
-        let choice = staged.get_untracked();
-        // Only a name this build knows, so a stale staged value cannot become a
-        // stored one. It should not be possible; the cost of checking is a
-        // comparison.
-        if icon_catalog::find(&choice).is_some() {
-            icon.set(choice);
+    // A row's `click`, not its `change` — a native radiogroup fires `change`
+    // as arrow-key focus moves between options with no click involved, and
+    // binding immediate apply-and-close to `change` would end browsing on the
+    // first arrow press. `click` fires for a pointer tap and for
+    // Space-activation of a focused radio, but not for arrow traversal alone
+    // (DR-0035).
+    let select = move |name: &'static str| {
+        // Only a name this build knows, so a value from a stale row can never
+        // reach the form. It should not be possible; the cost of checking is
+        // a comparison.
+        if icon_catalog::find(name).is_some() {
+            icon.set(name.to_owned());
         }
         close();
     };
 
     // Everything that dismisses the dialog ends here — Escape, the close
-    // control, and applying a choice — so returning focus is written once.
+    // control, and selecting a choice — so returning focus is written once.
     let dismissed = move |_| {
         expanded.set(false);
         if let Some(element) = trigger.get_untracked() {
             let _ = element.focus();
         }
     };
-
-    // Disabled when the staged choice is not among the rows on screen, so that
-    // applying can never do something the visitor cannot see.
-    let cannot_apply =
-        move || icon_catalog::find(&staged.get()).is_none_or(|entry| !matches(entry));
 
     view! {
         <div class="field">
@@ -173,8 +170,8 @@ pub fn IconField(icon: RwSignal<String>) -> impl IntoView {
                                             type="radio"
                                             name="picker-icon"
                                             value=entry.name
-                                            prop:checked=move || staged.get() == entry.name
-                                            on:change=move |_| staged.set(entry.name.to_owned())
+                                            prop:checked=move || icon.get() == entry.name
+                                            on:click=move |_| select(entry.name)
                                         />
                                         <span class="icon-result-surface">
                                             <span class="result-icon" aria-hidden="true">
@@ -196,15 +193,6 @@ pub fn IconField(icon: RwSignal<String>) -> impl IntoView {
             <Show when=move || count.get() == 0>
                 <p class="empty-results">"No icons match your search."</p>
             </Show>
-
-            <button
-                class="apply-icon-button"
-                type="button"
-                disabled=cannot_apply
-                on:click=apply
-            >
-                "Use selected icon"
-            </button>
         </dialog>
     }
 }

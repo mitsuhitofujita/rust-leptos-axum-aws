@@ -3,11 +3,13 @@
 //!
 //! Mirrors [`crate::icon_picker::IconField`]'s shape exactly — DR-0013's
 //! compact-selector-plus-modal-picker pattern, generalized from choosing an
-//! icon to choosing a registered action type. What differs is the source of
-//! rows: `IconField` reads a 725-row compile-time catalog and defers building
-//! them until the dialog first opens; `TypeField` reads the account's own
-//! action types, loaded once by the page above it and small enough to render
-//! eagerly with no such deferral.
+//! icon to choosing a registered action type, and DR-0035's rule that
+//! activating a result row applies it and closes the dialog in the same
+//! action, narrowing DR-0013's original stage-then-apply behavior. What
+//! differs is the source of rows: `IconField` reads a 725-row compile-time
+//! catalog and defers building them until the dialog first opens; `TypeField`
+//! reads the account's own action types, loaded once by the page above it and
+//! small enough to render eagerly with no such deferral.
 
 use std::sync::Arc;
 
@@ -18,9 +20,10 @@ use shared::ActionType;
 use crate::icons::{ActivityGlyph, Check, ChevronRight, Close};
 
 /// `type_id` is the form's own signal, written exactly once per visit to the
-/// picker — when `Use selected type` is activated, mirroring `IconField`'s
-/// `icon` (DR-0013). `types` is the account's full list; the caller decides
-/// what to do when it is empty; this component assumes at least one entry.
+/// picker — when a result row is activated, mirroring `IconField`'s `icon`
+/// (DR-0035, narrowing DR-0013). `types` is the account's full list; the
+/// caller decides what to do when it is empty; this component assumes at
+/// least one entry.
 ///
 /// `Arc`, not `Rc`: Leptos's signals require `Send + Sync` even in this
 /// single-threaded CSR build, unlike `IconField`'s `&'static [Icon]`, which
@@ -33,9 +36,6 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
     let trigger: NodeRef<Button> = NodeRef::new();
     let search: NodeRef<Input> = NodeRef::new();
 
-    // What the visitor has picked but not yet applied. Separate from
-    // `type_id` precisely so that dismissing the dialog can discard it.
-    let staged = RwSignal::new(String::new());
     let query = RwSignal::new(String::new());
     let expanded = RwSignal::new(false);
 
@@ -72,7 +72,6 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
     };
 
     let open = move |_| {
-        staged.set(type_id.get_untracked());
         query.set(String::new());
         expanded.set(true);
 
@@ -93,21 +92,26 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
         }
     };
 
-    let apply = {
+    // A row's `click`, not its `change` — a native radiogroup fires `change`
+    // as arrow-key focus moves between options with no click involved, and
+    // binding immediate apply-and-close to `change` would end browsing on the
+    // first arrow press. `click` fires for a pointer tap and for
+    // Space-activation of a focused radio, but not for arrow traversal alone
+    // (DR-0035).
+    let select = {
         let types = types.clone();
-        move |_| {
-            let choice = staged.get_untracked();
-            // Only an id this list actually has, so a stale staged value
-            // cannot become a stored one.
-            if types.iter().any(|candidate| candidate.id == choice) {
-                type_id.set(choice);
+        move |id: String| {
+            // Only an id this list actually has, so a value from a stale row
+            // can never reach the form.
+            if types.iter().any(|candidate| candidate.id == id) {
+                type_id.set(id);
             }
             close();
         }
     };
 
     // Everything that dismisses the dialog ends here — Escape, the close
-    // control, and applying a choice — so returning focus is written once.
+    // control, and selecting a choice — so returning focus is written once.
     let dismissed = move |_| {
         expanded.set(false);
         if let Some(element) = trigger.get_untracked() {
@@ -115,16 +119,10 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
         }
     };
 
-    // Disabled when the staged choice is not among the rows on screen, so
-    // that applying can never do something the visitor cannot see.
-    let cannot_apply = {
-        let matches = matches.clone();
-        move || !matches(&staged.get())
-    };
-
     let rows = {
         let types = types.clone();
         let matches = matches.clone();
+        let select = select.clone();
         move || {
             types
                 .iter()
@@ -134,9 +132,10 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
                     let unit = candidate.unit.clone();
                     let icon = candidate.icon.clone();
                     let matches = matches.clone();
+                    let select = select.clone();
                     let row_id = id.clone();
                     let checked_id = id.clone();
-                    let change_id = id.clone();
+                    let click_id = id.clone();
 
                     view! {
                         <label class="type-result" hidden=move || !matches(&row_id)>
@@ -144,8 +143,8 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
                                 type="radio"
                                 name="picker-type"
                                 value=id
-                                prop:checked=move || staged.get() == checked_id
-                                on:change=move |_| staged.set(change_id.clone())
+                                prop:checked=move || type_id.get() == checked_id
+                                on:click=move |_| select(click_id.clone())
                             />
                             <span class="type-result-surface">
                                 <span class="result-icon" aria-hidden="true">
@@ -250,15 +249,6 @@ pub fn TypeField(type_id: RwSignal<String>, types: Vec<ActionType>) -> impl Into
             <Show when=move || count.get() == 0>
                 <p class="empty-results">"No action types match your search."</p>
             </Show>
-
-            <button
-                class="apply-type-button"
-                type="button"
-                disabled=cannot_apply
-                on:click=apply
-            >
-                "Use selected type"
-            </button>
         </dialog>
     }
 }

@@ -1751,9 +1751,7 @@ h1 em {
 .icon-dialog-close:focus-visible,
 .type-dialog-close:focus-visible,
 .icon-search:focus-visible,
-.type-search:focus-visible,
-.apply-icon-button:focus-visible,
-.apply-type-button:focus-visible {
+.type-search:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 3px;
 }
@@ -1926,29 +1924,6 @@ h1 em {
 .icon-result[hidden],
 .type-result[hidden] {
   display: none;
-}
-
-.apply-icon-button,
-.apply-type-button {
-  width: 100%;
-  min-height: 56px;
-  margin-top: var(--space-md);
-  padding: 0 var(--space-md);
-  border: 0;
-  border-radius: var(--space-md);
-  color: var(--white);
-  background: var(--accent);
-  box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
-  font-size: var(--font-body);
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.apply-icon-button:disabled,
-.apply-type-button:disabled {
-  box-shadow: none;
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 /* --- Fallback view ------------------------------------------------------- */
