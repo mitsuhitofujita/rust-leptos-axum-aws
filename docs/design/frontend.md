@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-17
+Updated: 2026-08-19
 
 ## Purpose
 
@@ -272,6 +272,14 @@ dependency of `crates/icongen` alone (DR-0019).
 - Client-side validation is a convenience, never the check. The service
   validates what it stores, and the form's own rules exist to save a round trip
   — see [Backend](backend.md).
+- A numeric field bound with `prop:value` (a controlled input, re-applying the
+  signal to the DOM on every keystroke) must use `type="text"` with
+  `inputmode="decimal"` or `"numeric"`, never `type="number"`. A `type="number"`
+  input's `value` goes empty the instant its text stops being a valid
+  floating-point number — which a bare trailing `.` is not — so the reactive
+  write-back erases the `.` before a fractional digit can follow it, making
+  decimal entry impossible. The action Value field learned this the hard way
+  — DR-0034.
 - A `<dialog>`'s CSS must not give it an unconditional `display` value. The
   browser's own stylesheet is what hides one after `close()` —
   `dialog:not([open]) { display: none; }` — and author styles outrank that

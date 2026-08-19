@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-18
+Updated: 2026-08-19
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -74,3 +74,4 @@ Not yet written, because it does not exist yet:
 | [DR-0031](../decisions/DR-0031-router-level-tests-live-inside-main-rs.md) | Router-level tests for `server` live inside `main.rs`, not a split `lib.rs` |
 | [DR-0032](../decisions/DR-0032-an-action-record-is-located-by-owner-partition-query-not-a-secondary-index.md) | An action record is located by owner-partition query, not a secondary index |
 | [DR-0033](../decisions/DR-0033-the-dashboards-ten-day-summary-buckets-by-utc-calendar-day.md) | The dashboard's ten-day summary buckets by UTC calendar day |
+| [DR-0034](../decisions/DR-0034-the-action-value-field-is-a-text-input-not-a-number-input.md) | The action value field is a text input, not a number input |
