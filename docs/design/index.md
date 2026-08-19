@@ -53,7 +53,7 @@ Not yet written, because it does not exist yet:
 | [DR-0010](../decisions/DR-0010-the-spa-signs-in-through-the-hosted-ui-by-hand.md) | The SPA signs in through the hosted UI, with a PKCE flow written by hand — narrowed by DR-0028 |
 | [DR-0011](../decisions/DR-0011-authenticated-screens-are-guarded-in-the-router.md) | Authenticated screens are guarded in the router, as experience rather than enforcement |
 | [DR-0012](../decisions/DR-0012-action-types-choose-icons-from-a-built-in-set.md) | Action types choose one icon from an application-owned built-in set — superseded by DR-0014 |
-| [DR-0013](../decisions/DR-0013-action-type-icons-use-a-searchable-modal-picker.md) | Action type icons are selected through a searchable modal picker |
+| [DR-0013](../decisions/DR-0013-action-type-icons-use-a-searchable-modal-picker.md) | Action type icons are selected through a searchable modal picker — narrowed by DR-0035 |
 | [DR-0014](../decisions/DR-0014-action-type-icons-use-lucide-names-and-svgs.md) | Action type icons use Lucide canonical names and locally rendered SVGs |
 | [DR-0015](../decisions/DR-0015-one-dynamodb-table-keyed-by-owner-and-entity-kind.md) | One DynamoDB table holds every entity, keyed by owner and entity kind |
 | [DR-0016](../decisions/DR-0016-records-copy-their-action-types-display-attributes.md) | An action record copies its action type's display attributes |
@@ -75,3 +75,4 @@ Not yet written, because it does not exist yet:
 | [DR-0032](../decisions/DR-0032-an-action-record-is-located-by-owner-partition-query-not-a-secondary-index.md) | An action record is located by owner-partition query, not a secondary index |
 | [DR-0033](../decisions/DR-0033-the-dashboards-ten-day-summary-buckets-by-utc-calendar-day.md) | The dashboard's ten-day summary buckets by UTC calendar day |
 | [DR-0034](../decisions/DR-0034-the-action-value-field-is-a-text-input-not-a-number-input.md) | The action value field is a text input, not a number input |
+| [DR-0035](../decisions/DR-0035-a-picker-row-applies-on-click-not-on-change.md) | A picker row applies on click, not on change — narrows DR-0013 |

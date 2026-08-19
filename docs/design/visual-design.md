@@ -120,9 +120,10 @@ hidden but remains part of the control's accessible name. The field opens a
 centered white modal over a dimmed, lightly blurred shell. The modal combines a
 normal search input with vertically scrollable 56-pixel result rows; every row
 pairs a 42-pixel glyph container with the official Lucide icon name and a
-separate checked indicator. The final `Use selected icon` action uses the accent
-surface. This composition keeps the form stable as the supported Lucide catalog
-grows (DR-0013, DR-0014).
+separate checked indicator. Activating a row applies it and closes the modal
+immediately, so no further confirming action exists to style (DR-0035,
+narrowing DR-0013). This composition keeps the form stable as the supported
+Lucide catalog grows (DR-0013, DR-0014).
 
 The footer closes every page with a separator and a centered uppercase `actord`
 label. It shares the page's 26-pixel horizontal alignment.

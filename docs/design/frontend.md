@@ -131,8 +131,14 @@ would mean admitting a whole further category of icons nobody may choose.
 compact selector and the `<dialog>` it opens. Native throughout: `showModal`
 keeps focus inside and closes on Escape, the search field does its own editing,
 and the radio group does its own arrow keys. What is written is the filtering,
-the live count, and the rule that a staged choice reaches the form only when
-`Use selected icon` is activated (DR-0013).
+the live count, and the rule that activating a result row applies it and
+closes the dialog in the same action (DR-0035, narrowing DR-0013). The
+activation binds to the row's `click`, not the group's `change`: a native
+radiogroup fires `change` as arrow-key focus moves between options with no
+click involved, so binding immediate apply-and-close to `change` would end
+keyboard browsing on the first arrow press. `click` fires for a pointer tap
+and for Space-activation of a focused radio, but not for arrow traversal
+alone.
 
 **The type picker** is `type_picker::TypeField`, the same shape as `IconField`
 generalized from choosing an icon to choosing one of the account's own

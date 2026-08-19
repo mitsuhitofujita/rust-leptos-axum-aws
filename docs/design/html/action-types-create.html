@@ -411,8 +411,7 @@
       }
 
       .icon-dialog-close:focus-visible,
-      .icon-search:focus-visible,
-      .apply-icon-button:focus-visible {
+      .icon-search:focus-visible {
         outline: 3px solid rgba(231, 53, 98, 0.2);
         outline-offset: 3px;
       }
@@ -550,27 +549,6 @@
       .empty-results[hidden],
       .icon-result[hidden] {
         display: none;
-      }
-
-      .apply-icon-button {
-        width: 100%;
-        min-height: 56px;
-        margin-top: var(--space-md);
-        padding: 0 var(--space-md);
-        border: 0;
-        border-radius: var(--space-md);
-        color: var(--white);
-        background: var(--accent);
-        box-shadow: 0 12px 26px rgba(199, 30, 75, 0.22);
-        font-size: var(--font-body);
-        font-weight: 800;
-        cursor: pointer;
-      }
-
-      .apply-icon-button:disabled {
-        box-shadow: none;
-        cursor: not-allowed;
-        opacity: 0.45;
       }
 
       @media (max-height: 720px) {
@@ -891,7 +869,6 @@
       </div>
 
       <p class="empty-results" data-empty-results hidden>No icons match your search.</p>
-      <button class="apply-icon-button" type="button" data-apply-icon>Use selected icon</button>
     </dialog>
 
     <script>
@@ -908,15 +885,26 @@
       );
       const resultsMeta = iconDialog.querySelector("[data-results-meta]");
       const emptyResults = iconDialog.querySelector("[data-empty-results]");
-      const applyIconButton = iconDialog.querySelector("[data-apply-icon]");
 
-      const updateApplyState = () => {
-        const choice = iconDialog.querySelector(
-          'input[name="picker-icon"]:checked',
-        );
-        applyIconButton.disabled =
-          !choice || choice.closest("[data-icon-option]").hidden;
+      // A row's click, not the group's change — a native radiogroup fires
+      // change as arrow-key focus moves between options with no click
+      // involved, and applying on change would end browsing on the first
+      // arrow press (DR-0035).
+      const applyChoice = (option) => {
+        const choice = option.querySelector('input[name="picker-icon"]');
+        const icon = option.querySelector("[data-picker-icon] svg");
+
+        iconValue.value = choice.value;
+        selectedIconName.textContent = option.dataset.label;
+        selectedIcon.replaceChildren(icon.cloneNode(true));
+        iconDialog.close();
       };
+
+      iconOptions.forEach((option) => {
+        option
+          .querySelector('input[name="picker-icon"]')
+          .addEventListener("click", () => applyChoice(option));
+      });
 
       const filterIcons = () => {
         const query = iconSearch.value.trim().toLocaleLowerCase();
@@ -933,7 +921,6 @@
         resultsMeta.textContent =
           `${visibleCount} ${visibleCount === 1 ? "icon" : "icons"}`;
         emptyResults.hidden = visibleCount !== 0;
-        updateApplyState();
       };
 
       iconTrigger.addEventListener("click", () => {
@@ -950,24 +937,10 @@
       });
 
       iconSearch.addEventListener("input", filterIcons);
-      iconDialog.addEventListener("change", updateApplyState);
 
       iconDialog
         .querySelector("[data-dialog-close]")
         .addEventListener("click", () => iconDialog.close());
-
-      applyIconButton.addEventListener("click", () => {
-        const choice = iconDialog.querySelector(
-          'input[name="picker-icon"]:checked',
-        );
-        const option = choice.closest("[data-icon-option]");
-        const icon = option.querySelector("[data-picker-icon] svg");
-
-        iconValue.value = choice.value;
-        selectedIconName.textContent = option.dataset.label;
-        selectedIcon.replaceChildren(icon.cloneNode(true));
-        iconDialog.close();
-      });
 
       iconDialog.addEventListener("close", () => {
         iconTrigger.setAttribute("aria-expanded", "false");

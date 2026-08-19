@@ -1,5 +1,7 @@
 # DR-0013: Action type icons use a searchable modal picker
-Status: accepted
+Status: narrowed by DR-0035 — a row now applies on click and closes the
+dialog immediately; the staged-value-then-explicit-`Use selected icon`-button
+behavior described below no longer holds
 Date: 2026-08-09
 
 ## Context

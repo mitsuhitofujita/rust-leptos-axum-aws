@@ -273,9 +273,6 @@ field:
 ║  ├ glyph  Droplets            ┤  ║
 ║  ├ glyph  Book Open           ┤  ║
 ║  └ ... filtered choices ...   ┘  ║
-║                                  ║
-║  ┌     Use selected icon      ┐  ║
-║  └────────────────────────────┘  ║
 ╚══════════════════════════════════╝
 ```
 
@@ -283,15 +280,17 @@ The normal search input receives focus on open and filters the supported Lucide
 catalog by each icon's official English name. A live result count and an
 explicit empty state report the filter outcome. Results form a vertically
 scrollable native single-select radio group: each row pairs a glyph with its
-official name and keeps focus visually distinct from the checked state. The
-selection does not change the form until `Use selected icon` is activated. The
-submitted identifier is the corresponding canonical kebab-case Lucide name
-(DR-0014).
+official name and keeps focus visually distinct from the checked state.
+Activating a row applies it immediately and closes the dialog — there is no
+separate confirm step (DR-0035, narrowing DR-0013). The submitted identifier is
+the corresponding canonical kebab-case Lucide name (DR-0014).
 
 The native modal keeps focus inside. The close button or Escape dismisses it
-without applying the staged choice, then returns focus to the compact selector.
-Search uses normal platform text-editing keys and radios retain native arrow-key
-behavior rather than reproducing a custom grid interaction (DR-0013).
+without changing the current selection, then returns focus to the compact
+selector. Search uses normal platform text-editing keys; a row applies on a
+pointer tap or on Space-activation of a focused radio, but arrow-key traversal
+between rows does not by itself apply one, so keyboard browsing is not cut
+short (DR-0035).
 
 ### Delete action type confirmation
 
@@ -400,8 +399,10 @@ field is a compact selector showing the current choice's icon, name and
 unit; activating it opens a searchable modal picker choosing among the
 account's own registered types — the same compact-selector-plus-modal-picker
 shape the action-type icon field uses (DR-0013), generalized from choosing an
-icon to choosing a type. The value field accepts a number and displays the
-selected type's unit as a fixed suffix, which updates when the type changes.
+icon to choosing a type, including the rule that activating a result applies
+it and closes the dialog immediately (DR-0035). The value field accepts a
+number and displays the selected type's unit as a fixed suffix, which
+updates when the type changes.
 
 When opened from a dashboard row, the type is preselected rather than
 defaulting to the account's first registered type — the transition page
@@ -532,7 +533,7 @@ action types ───────── Add action type ──▶ add action ty
 add action type ───── Cancel or created ─▶ action types
 action-type row ────────────────────────▶ edit action type
 add or edit action type ── icon field ──▶ icon picker
-icon picker ────── Use selected icon ───▶ the form, icon applied
+icon picker ────────── select a result ─▶ the form, icon applied
 icon picker ────── close or Escape ─────▶ the form, icon unchanged
 edit action type ───── Delete action type ──▶ deletion confirmation (type)
 deletion confirmation (type) ── Keep action type ──▶ edit action type
@@ -540,7 +541,7 @@ actions ─────────────────── Add action ─
 add action ──────────── Cancel or created ─▶ actions
 action record row ───────────────────────▶ edit action
 add action ── action type field ────────▶ type picker
-type picker ────── Use selected type ───▶ the form, type applied
+type picker ────────── select a result ─▶ the form, type applied
 type picker ────── close or Escape ─────▶ the form, type unchanged
 edit action ─────────────── Delete action ──▶ deletion confirmation (action)
 deletion confirmation (action) ── Keep action ──▶ edit action
