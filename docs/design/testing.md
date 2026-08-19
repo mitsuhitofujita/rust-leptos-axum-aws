@@ -14,8 +14,6 @@ It covers the Rust workspace — `crates/shared`, `crates/server`, `crates/app`
 DR-0020 and DR-0028 already established for what needs real AWS; it says which
 gaps those recipes leave and what closes them without one.
 
-This document was drafted collaboratively and awaits the human confirmation
-Design Documents need before an update is considered final (`docs/README.md`).
 One item remains explicitly deferred rather than decided — see "Proposed: pure
 logic in `crates/app`" — everything else in Structure describes what is
 implemented today.
