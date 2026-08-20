@@ -173,24 +173,61 @@ pub async fn complete_sign_in() -> AuthState {
     }
 }
 
-async fn settle() -> Result<AuthState, String> {
-    let search = window()?.location().search().map_err(js_error)?;
-    let query = UrlSearchParams::new_with_str(&search).map_err(js_error)?;
-
+/// Whatever this tab can already tell about its session without the network:
+/// an ordinary load's stored session, or the hosted UI's own refusal. `Ok(None)`
+/// means a `code` is present and only [`complete_sign_in`]'s asynchronous
+/// exchange can settle it.
+///
+/// Split out of [`settle`] so [`initial_state`] can read it before the first
+/// render, rather than only inside `complete_sign_in`'s `spawn_local`, which
+/// otherwise renders one frame of the signed-out home's entrance animation for
+/// every ordinary load — signed in or not — before overwriting it a moment
+/// later.
+fn settle_without_code(query: &UrlSearchParams) -> Result<Option<AuthState>, String> {
     if let Some(error) = query.get("error") {
         // The redirect is over either way, so the transient keys and the query
         // string go regardless of the outcome.
         forget_transient();
         clean_url()?;
-        return Ok(AuthState::Error(
+        return Ok(Some(AuthState::Error(
             query.get("error_description").unwrap_or(error),
-        ));
+        )));
     }
 
-    let Some(code) = query.get("code") else {
-        return Ok(restore_session());
-    };
+    if query.get("code").is_none() {
+        return Ok(Some(restore_session()));
+    }
 
+    Ok(None)
+}
+
+/// Whatever [`settle_without_code`] can resolve synchronously, read at mount
+/// before the first render. `None` means a `code` is present and the caller
+/// must fall back to [`complete_sign_in`]'s asynchronous exchange.
+pub fn initial_state() -> Option<AuthState> {
+    if !is_configured() {
+        return Some(AuthState::Disabled);
+    }
+
+    let query = current_query().ok()?;
+    settle_without_code(&query).ok().flatten()
+}
+
+fn current_query() -> Result<UrlSearchParams, String> {
+    let search = window()?.location().search().map_err(js_error)?;
+    UrlSearchParams::new_with_str(&search).map_err(js_error)
+}
+
+async fn settle() -> Result<AuthState, String> {
+    let query = current_query()?;
+
+    if let Some(state) = settle_without_code(&query)? {
+        return Ok(state);
+    }
+
+    let code = query
+        .get("code")
+        .expect("settle_without_code returned None only when a code is present");
     let returned_state = query.get("state");
     let expected_state = read(KEY_STATE);
     let verifier = read(KEY_VERIFIER);

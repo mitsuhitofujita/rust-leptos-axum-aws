@@ -46,16 +46,27 @@ pub fn note_unauthorized() {
 
 #[component]
 pub fn App() -> impl IntoView {
-    let auth_state = RwSignal::new(AuthState::Loading);
+    // `initial_state` resolves everything that needs no network — an ordinary
+    // load's stored session or absence of one, and a hosted-UI refusal —
+    // before this first render, so only a genuine code exchange ever renders
+    // `Loading`. Settling those cases through `spawn_local` below instead
+    // would still render `Loading` for one frame first, which is what used to
+    // flash the signed-out home's entrance animation at an already-signed-in
+    // visitor on every ordinary load.
+    let settled_at_mount = auth::initial_state();
+    let needs_exchange = settled_at_mount.is_none();
+    let auth_state = RwSignal::new(settled_at_mount.unwrap_or(AuthState::Loading));
     provide_context(Auth(auth_state));
 
     // Settles `Loading` into one of the other four. When the visitor is
     // returning from the hosted UI this is where the code is exchanged, so it
     // has to finish before any call that needs the token goes out — which is
     // what [`RequireAuth`] holds a guarded screen back for.
-    spawn_local(async move {
-        auth_state.set(auth::complete_sign_in().await);
-    });
+    if needs_exchange {
+        spawn_local(async move {
+            auth_state.set(auth::complete_sign_in().await);
+        });
+    }
 
     // The shell every screen shares: one mobile column, the page in it, and the
     // footer following the content rather than fixed over it. `<Routes>` renders
