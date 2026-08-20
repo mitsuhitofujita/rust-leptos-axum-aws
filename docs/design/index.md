@@ -1,6 +1,6 @@
 # Design Document Index
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 
 The entry point to the durable layer. Start here, read the document covering the
 area being changed, and follow the Decision Record citations when a constraint
@@ -76,3 +76,5 @@ Not yet written, because it does not exist yet:
 | [DR-0033](../decisions/DR-0033-the-dashboards-ten-day-summary-buckets-by-utc-calendar-day.md) | The dashboard's ten-day summary buckets by UTC calendar day |
 | [DR-0034](../decisions/DR-0034-the-action-value-field-is-a-text-input-not-a-number-input.md) | The action value field is a text input, not a number input |
 | [DR-0035](../decisions/DR-0035-a-picker-row-applies-on-click-not-on-change.md) | A picker row applies on click, not on change — narrows DR-0013 |
+| [DR-0036](../decisions/DR-0036-auth-state-settles-synchronously-when-no-network-call-is-needed.md) | `AuthState` settles synchronously whenever `complete_sign_in`'s own logic needs no network call |
+| [DR-0037](../decisions/DR-0037-a-still-settling-composition-shows-its-eyebrow-not-its-title.md) | A still-settling composition shows its eyebrow, not its title, and no entrance animation |

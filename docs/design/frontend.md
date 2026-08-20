@@ -1,6 +1,6 @@
 # Frontend
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 
 ## Purpose
 
@@ -157,10 +157,13 @@ rebuild 725 SVGs.
 
 **Authentication.** `crates/app/src/auth.rs` implements Authorization Code Flow
 with PKCE against the Cognito hosted UI by hand — no auth library, no AWS SDK
-(DR-0010). `App` settles an `AuthState` signal once at mount and provides it
-through context: `Loading` until the callback has been dealt with, then
-`Disabled`, `SignedOut`, `SignedIn` or `Error`. The header renders a control from
-it, and nothing at all when the state is `Disabled`.
+(DR-0010). `App` settles an `AuthState` signal at mount and provides it
+through context. `auth::initial_state` resolves it synchronously, before the
+first render, whenever the answer needs no network call — an unconfigured
+build, an ordinary load's stored session or its absence, and a hosted UI
+`error` — and `Loading` is reached only while `complete_sign_in`'s
+asynchronous code exchange is genuinely pending (DR-0036). The header renders
+a control from the settled state, and nothing at all when it is `Disabled`.
 
 The access token, its expiry and the claims read for display live in
 `sessionStorage`. No refresh token is kept: an expired session sends the visitor

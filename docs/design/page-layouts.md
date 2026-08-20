@@ -1,6 +1,6 @@
 # Page Layouts
 
-Updated: 2026-08-17
+Updated: 2026-08-20
 
 ## Purpose
 
@@ -76,6 +76,21 @@ contains:
 The account email truncates on one line rather than widening the shell. The
 dashboard card is one link, with its label, message, and arrow all inside the
 same target.
+
+### Home, settling
+
+Home renders a third, transient composition while authentication is still
+settling. It is reached only during the Google sign-in redirect's token
+exchange — not on an ordinary load, which is always already resolved by the
+first render (DR-0036):
+
+1. The `actord` wordmark.
+2. A status eyebrow, `Checking your session…`, at the same position and
+   weight the settled compositions' own eyebrow takes.
+
+No title accompanies it and it carries no entrance animation, so a fast
+settle replaces the eyebrow's text in place rather than growing a caption or
+a full heading out of it (DR-0037).
 
 ### Dashboard
 

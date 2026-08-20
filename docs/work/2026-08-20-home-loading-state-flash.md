@@ -1,6 +1,6 @@
 # Home's loading state briefly flashes the signed-out heading
 
-Status: in progress
+Status: complete
 Started: 2026-08-20
 Branch: main
 
@@ -295,16 +295,19 @@ decided here.
   and this devcontainer has no browser (testing.md, workspace.md), so
   compiler checks and a by-hand trace of all five `AuthState` outcomes were
   as far as verification here could go on its own.
-- The user tested the first round of changes (steps 1–3) in a real browser
-  and found the flash still reproduced for one case — see the superseded
-  Plan step and the second Progress entry. Step 6 (dropping the animated
-  heading from `Loading` entirely) is not yet re-confirmed in a live
-  browser; that confirmation is still needed before this Work Log can be
-  retired.
+- The user tested each round of changes in a real browser. The first round
+  (steps 1–3) and the second (step 6) each turned out incomplete — see the
+  two superseded Plan notes and the corresponding Progress entries. The
+  third round (step 10, the eyebrow treatment) was confirmed by the user to
+  have resolved the flash.
 
 ## Retirement
 
-- [ ] Design Documents updated
-- [ ] Decision Records written (DR-____)
-- [ ] Non-obvious knowledge preserved — rejected alternatives, pitfalls, constraints
-- [ ] No durable document depends on this log
+- [x] Design Documents updated — `frontend.md`'s Authentication paragraph and
+      a new "Home, settling" subsection in `page-layouts.md`.
+- [x] Decision Records written — DR-0036 (synchronous `AuthState` settling),
+      DR-0037 (a still-settling composition's eyebrow-only treatment).
+- [x] Non-obvious knowledge preserved — the three rejected `Loading` visual
+      treatments and why each still flashed are in DR-0037; the rejected
+      delay-before-show alternative is in both records.
+- [x] No durable document depends on this log — checked by grep.
