@@ -373,6 +373,15 @@ img.account-image {
   content: "";
 }
 
+/* Home's transient loading eyebrow: takes `.page-heading`'s top position
+   without its entrance animation or an accompanying title, so a fast settle
+   swaps text in the eyebrow's own slot rather than growing a full heading
+   out of a plain status line. The element selector outweighs `.eyebrow`
+   alone regardless of source order. */
+p.loading-eyebrow {
+  margin-top: var(--space-lg);
+}
+
 h1 {
   max-width: 350px;
   margin: 0;
@@ -1982,6 +1991,10 @@ h1 em {
   }
 
   .page-heading {
+    margin-top: var(--space-md);
+  }
+
+  p.loading-eyebrow {
     margin-top: var(--space-md);
   }
 

@@ -41,15 +41,21 @@ pub fn HomePage() -> impl IntoView {
         AuthState::Error(message) => {
             view! { <SignedOutHome error=Some(message) sign_in=sign_in /> }.into_any()
         }
-        // Only until `complete_sign_in` settles. The Google button is withheld
-        // rather than shown, so a returning visitor is not offered a sign-in
-        // they already have for the moment it takes to notice.
+        // Reached only while `complete_sign_in` is exchanging an authorization
+        // code for tokens — `auth::initial_state` already resolves every other
+        // case before this component's first render, so an ordinary visit with
+        // an existing (or absent) session never passes through this arm.
+        //
+        // The status text takes the eyebrow's position and weight rather than
+        // the title's: a returning visitor whose Google session is still live
+        // can have the exchange settle fast enough that this composition is
+        // visible for a moment at most, and an `<h1>`-sized placeholder there
+        // read as more prominent than a moment-long state should be. The
+        // eyebrow's slot still sits where every settled state's own eyebrow
+        // sits, so the swap is a smaller jump than a bare caption line was.
         AuthState::Loading => view! {
             <SiteHeader />
-            <SignedOutIntro />
-            <section class="auth-panel">
-                <p class="status">"Checking your session…"</p>
-            </section>
+            <p class="eyebrow loading-eyebrow">"Checking your session…"</p>
         }
         .into_any(),
     }
