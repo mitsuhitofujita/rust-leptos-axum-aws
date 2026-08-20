@@ -97,6 +97,72 @@ of how `spawn_local` happens to schedule its poll.
    there is no automated or live-browser check available beyond this and the
    compiler.
 
+**Superseded (2026-08-20), by user's live-browser check.** Step 5's compiler-
+only verification was not enough: the user tested in a real browser and the
+flash still occurred, specifically when signed out of the app but still
+signed in to Google. That is exactly the one case steps 1–3 deliberately left
+alone — a `code` returning from the hosted UI, settled through `Loading` +
+`spawn_local`'s async exchange — on the Interpretation's assumption that a
+real network round trip is long enough for `Loading` to be a legitimate,
+visible wait rather than a flash. That assumption is what was wrong: with an
+already-authenticated Google session, the redirect back and the token
+exchange both complete fast enough to reproduce the same mount-then-tear-down
+of `SignedOutIntro`'s entrance animation, just narrowed down to this one
+path instead of every ordinary load.
+
+6. In `crates/app/src/home.rs`, drop `<SignedOutIntro/>` from `HomePage`'s
+   `AuthState::Loading` arm entirely, rendering just `<SiteHeader/>` and the
+   `"Checking your session…"` status line — the same minimal composition
+   `RequireAuth`'s own `Access::Pending` view already uses in `app.rs`,
+   which does not have this bug. No heading animation ever starts during
+   `Loading`, so it does not matter anymore how quickly the exchange settles.
+7. Re-verify with `just check` / `just lint`.
+
+**Superseded (2026-08-20), by a second round of user browser testing.** Step
+6 removed the motion but not the flash: the user reported the animation was
+gone, but the screen still flashed for an instant. Steps 6–7's implicit
+premise — that the flash *was* the entrance animation — was incomplete. With
+no motion involved, what remains is a plain, instantaneous content swap: a
+short single line ("Checking your session…") replaced without transition by
+`SignedInHome`'s much taller composition (heading, account row, dashboard
+card). Removing the animation stopped the wrong heading from visibly
+sliding/fading in, but the abrupt height and content change between the two
+DOM subtrees is still perceptible as a flash on its own, independent of any
+CSS `animation`. The user's own diagnosis, offered unprompted: keep a
+title-sized presence on screen throughout `Loading`, rather than a small
+caption that then grows into a full heading — smaller shape change, smaller
+flash.
+
+8. In `crates/app/src/home.rs`, change `HomePage`'s `AuthState::Loading` arm
+   to render the "Checking your session…" copy as an `<h1>` occupying the
+   same position and size `.page-heading`'s title takes (`style/main.css`
+   gets a `.loading-title` rule carrying `.page-heading`'s `margin-top`,
+   including its short-viewport contraction, but deliberately not its `enter`
+   animation), replacing the small `<p class="status">` used since step 6.
+   The wording stays exactly what was already shown; only its visual weight
+   and position change, so the eventual real heading replaces text roughly
+   in place rather than growing a small line into a large one.
+9. Re-verify with `just check` / `just lint`.
+
+**Superseded (2026-08-20), by user feedback on step 8's result.** The `<h1>`
+placeholder was "too prominent" (目立ちすぎ) for a state meant to last a
+moment at most — display-size, weight-800 text is a lot of visual weight to
+commit to for text that is likely to be replaced almost immediately. The
+user asked for the same copy at the eyebrow's weight and position instead of
+the title's.
+
+10. In `crates/app/src/home.rs`, render the `Loading` copy as
+    `<p class="eyebrow loading-eyebrow">` rather than `<h1 class=
+    "loading-title">` — the small, uppercase, tracked-out treatment every
+    other screen's eyebrow already uses, with no accompanying title.
+    `style/main.css` replaces `.loading-title` with `p.loading-eyebrow`,
+    positioned beside `.eyebrow`'s own rule: `margin-top: var(--space-lg)`
+    (`var(--space-md)` under the existing `max-height: 720px` contraction),
+    using an element+class selector so it wins over the plain `.eyebrow`
+    rule's `margin: 0 0 var(--space-md)` regardless of source order, rather
+    than depending on declaration order to break the specificity tie.
+11. Re-verify with `just check` / `just lint`.
+
 ## Progress
 
 ### 2026-08-20
@@ -138,16 +204,83 @@ the plan, not a scope change, since they fall under the same
 `settle_without_code`/`is_configured()` synchronous path step 2 already
 covered.
 
-**Possible Decision Record.** The fix generalizes to a pattern this project
-had not written down: `App`'s auth-settling code always took the
-`Loading` → `spawn_local` path regardless of whether the answer was actually
-knowable without the network, which is what let a CSS entrance animation on
-`.page-heading` flash between two fresh mounts of visually different content
-for an outcome that was, in every case but one, already decided by the time
-`App()`'s body ran. Whether this is worth a Decision Record — the general
-rule "seed a signal synchronously wherever the async wrapper's own logic can
-already answer without awaiting anything" — is flagged to the user rather
-than decided here.
+The user then checked in a real browser: signed out of the app but still
+signed in to Google, the flash still appeared. This is the `code`-exchange
+path steps 1–3 left alone (see Plan's superseded note above) — with an
+already-live Google session, the round trip through the hosted UI and the
+token exchange both complete fast enough to reproduce the same
+mount-then-replace of `SignedOutIntro`'s entrance animation that the
+ordinary-load case had.
+
+Implemented Plan step 6: `crates/app/src/home.rs`'s `AuthState::Loading` arm
+no longer renders `<SignedOutIntro/>` or the `.auth-panel` wrapper around the
+status line — just `<SiteHeader/>` and `<p class="status">"Checking your
+session…"</p>`, mirroring `RequireAuth`'s `Access::Pending` view in `app.rs`,
+which never had this problem because it never mounted an animated heading in
+the first place. `.page-heading`'s `enter` animation (`style/main.css`) now
+never starts during `Loading` at all, so the flash cannot occur regardless of
+how fast the exchange resolves. `just check` / `just lint` stay clean (step
+7). Not yet re-confirmed in a live browser.
+
+The user re-checked: the animation was confirmed gone, but a brief, non-
+animated flash remained — the plain content swap described in the Plan's
+second superseded note above. The user's own suggestion was adopted rather
+than the delay-before-show alternative that had been offered: keep a
+title-sized presence on screen throughout `Loading` so the eventual swap is
+smaller.
+
+Implemented Plan step 8: `home.rs`'s `Loading` arm now renders
+`<h1 class="loading-title">"Checking your session…"</h1>` in place of the
+`<p class="status">` step 6 used — same wording, now at the same size and
+position `.page-heading`'s own `<h1>` occupies. `style/main.css` gained
+`.loading-title { margin: var(--space-lg) 0 0; }` beside `.page-heading`
+(plus its `max-height: 720px` contraction to `--space-md`, mirroring
+`.page-heading`'s own), deliberately without `.page-heading`'s `animation:
+enter` rule — the bare `h1` selector already supplies the display-size
+typography, so no other new CSS was needed. `.status` remains defined and
+used elsewhere (`RequireAuth`'s `Access::Pending` in `app.rs`); nothing else
+was touched. `just check` / `just lint` stay clean (step 9). Not yet
+re-confirmed in a live browser.
+
+The user called the `<h1>` placeholder too prominent (目立ちすぎ) for
+something meant to be on screen for a moment at most, and asked for the
+eyebrow's weight and position instead of the title's.
+
+Implemented Plan step 10: `home.rs`'s `Loading` arm now renders
+`<p class="eyebrow loading-eyebrow">"Checking your session…"</p>`, dropping
+`.loading-title`/`<h1>` entirely. `style/main.css` replaces the
+`.loading-title` rule with `p.loading-eyebrow { margin-top: var(--space-lg);
+}`, placed directly after `.eyebrow`'s own block, and uses the element+class
+selector specifically so its `margin-top` wins over `.eyebrow`'s `margin: 0 0
+var(--space-md)` shorthand by specificity rather than by depending on which
+rule happens to come last in the file. The `max-height: 720px` contraction
+was updated to match (`p.loading-eyebrow { margin-top: var(--space-md); }`).
+No accompanying title is rendered — the eyebrow line is the entire
+composition below `SiteHeader` while `Loading`. `just check` / `just lint`
+stay clean (step 11). Not yet re-confirmed in a live browser.
+
+**Possible Decision Record.** Two findings here look durable enough to
+outlive this Work Log:
+
+1. `App`'s auth-settling code always took the `Loading` → `spawn_local` path
+   regardless of whether the answer was actually knowable without the
+   network — seeding a signal synchronously wherever the async wrapper's own
+   logic can already answer without awaiting anything is the general fix.
+2. The one that actually closed the reported bug: a transient/provisional
+   composition (`Loading`, reached for a window whose length is not
+   controlled by this code — it ends whenever a network call the app does
+   not control happens to finish) should not carry an entrance animation on
+   content the settled state does not share, no matter how long that window
+   is expected to last. `RequireAuth`'s `Access::Pending` view already
+   followed this without it being written down anywhere; `HomePage`'s
+   `Loading` arm did not, and guessing that "a real network round trip is
+   long enough not to flash" (this log's original Interpretation) turned out
+   to be exactly the kind of unverified assumption about external timing the
+   work-log skill warns against — it was wrong the first time it met a real
+   browser.
+
+Whether either is worth a Decision Record is flagged to the user rather than
+decided here.
 
 ## Verification
 
@@ -158,12 +291,16 @@ than decided here.
 - `cargo test --workspace`: 64 passed, 10 ignored (unchanged, all in
   `server`); `app` still compiles and runs with 0 tests, as testing.md
   describes.
-- No live-browser check: `crates/app` has no automated tests and this
-  devcontainer has no browser (testing.md, workspace.md), so the flash itself
-  was not observed disappearing in a running app — verification is the
-  by-hand trace of all five `AuthState` outcomes in the Progress entry above,
-  which shows the new code produces the same final state as the old code in
-  every case, while four of five no longer pass through `Loading` at all.
+- No live-browser check from this side: `crates/app` has no automated tests
+  and this devcontainer has no browser (testing.md, workspace.md), so
+  compiler checks and a by-hand trace of all five `AuthState` outcomes were
+  as far as verification here could go on its own.
+- The user tested the first round of changes (steps 1–3) in a real browser
+  and found the flash still reproduced for one case — see the superseded
+  Plan step and the second Progress entry. Step 6 (dropping the animated
+  heading from `Loading` entirely) is not yet re-confirmed in a live
+  browser; that confirmation is still needed before this Work Log can be
+  retired.
 
 ## Retirement
 
